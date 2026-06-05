@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="AA Ledger"/>
+<title>EasyWithAA Ledger</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Mono:wght@400;500&display=swap');
+
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  :root{
+    --bg:#08090d;
+    --surface:#0f1118;
+    --border:#1e2030;
+    --gold:#c9a84c;
+    --gold2:#f0d080;
+    --green:#22c97a;
+    --red:#e05555;
+    --amber:#f59e0b;
+    --text:#e8e4d8;
+    --muted:#6a6650;
+    --muted2:#3a3820;
+  }
+  html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;overscroll-behavior:none;}
+  body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;}
+
+  /* HEADER */
+  .header{
+    background:linear-gradient(160deg,#0d0e14 0%,#141008 100%);
+    border-bottom:1px solid var(--border);
+    padding:env(safe-area-inset-top,16px) 18px 0;
+    position:sticky;top:0;z-index:100;
+  }
+  .header-top{display:flex;justify-content:space-between;align-items:flex-start;padding-top:14px;padding-bottom:12px;}
+  .club-name{font-size:9px;letter-spacing:4px;color:var(--muted);text-transform:uppercase;margin-bottom:3px;}
+  .club-title{font-family:'Playfair Display',serif;font-size:20px;color:var(--gold);line-height:1;}
+  .total-block{text-align:right;}
+  .total-label{font-size:8px;letter-spacing:3px;color:var(--muted);text-transform:uppercase;}
+  .total-val{font-family:'Playfair Display',serif;font-size:26px;color:var(--green);line-height:1.1;}
+
+  /* SPLIT CARDS */
+  .split-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 18px 12px;}
+  .split-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;}
+  .split-card.me{border-color:#c9a84c44;}
+  .split-name{font-size:8px;letter-spacing:3px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;}
+  .split-gross{font-size:15px;font-weight:500;color:var(--text);}
+  .split-withdrawn{font-size:10px;color:var(--red);margin-top:1px;}
+  .split-net{font-size:18px;font-weight:500;color:var(--green);margin-top:2px;}
+
+  /* TABS */
+  .tabs{display:flex;border-bottom:1px solid var(--border);}
+  .tab{flex:1;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);padding:9px;font-size:9px;letter-spacing:3px;text-transform:uppercase;cursor:pointer;font-family:'DM Mono',monospace;transition:all .2s;margin-bottom:-1px;}
+  .tab.active{color:var(--gold);border-bottom-color:var(--gold);}
+
+  /* CONTENT */
+  .content{flex:1;overflow-y:auto;padding:16px 18px;padding-bottom:calc(env(safe-area-inset-bottom,0px) + 20px);}
+
+  /* BUTTONS */
+  .btn-primary{width:100%;background:linear-gradient(135deg,#9a7020,#c9a84c);border:none;color:#08090d;border-radius:10px;padding:13px;font-size:11px;font-weight:500;letter-spacing:3px;text-transform:uppercase;cursor:pointer;font-family:'DM Mono',monospace;margin-bottom:14px;}
+  .btn-cancel{width:100%;background:var(--surface);border:1px solid var(--gold);color:var(--gold);border-radius:10px;padding:13px;font-size:11px;letter-spacing:3px;text-transform:uppercase;cursor:pointer;font-family:'DM Mono',monospace;margin-bottom:14px;}
+  .btn-save{width:100%;background:linear-gradient(135deg,#0d6e3a,#22c97a);border:none;color:#08090d;border-radius:8px;padding:12px;font-size:11px;font-weight:500;letter-spacing:3px;cursor:pointer;font-family:'DM Mono',monospace;}
+  .btn-withdraw{background:none;border:1px solid var(--red);color:var(--red);border-radius:6px;padding:5px 10px;font-size:9px;letter-spacing:2px;cursor:pointer;font-family:'DM Mono',monospace;}
+
+  /* FORM */
+  .form-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px;}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;}
+  .field label{display:block;font-size:8px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;}
+  .field input,.field select{width:100%;background:var(--bg);border:1px solid var(--muted2);border-radius:6px;color:var(--text);padding:9px 10px;font-size:13px;font-family:'DM Mono',monospace;outline:none;}
+  .field.full{grid-column:1/-1;}
+  .rake-preview{background:#0a1a10;border:1px solid #22c97a44;border-radius:8px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+  .rake-preview-label{font-size:9px;letter-spacing:2px;color:#4a8a60;}
+  .rake-preview-val{font-size:18px;color:var(--green);}
+  .rake-each{font-size:10px;color:#4a8a60;margin-top:1px;}
+
+  /* QUICK STRIP */
+  .quick-strip{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:18px;}
+  .qs-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center;}
+  .qs-label{font-size:8px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;}
+  .qs-val{font-size:16px;color:var(--text);margin-top:3px;}
+
+  /* SESSION LOG */
+  .day-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;margin-top:4px;}
+  .day-date{font-size:9px;letter-spacing:3px;color:var(--muted);text-transform:uppercase;}
+  .day-total{font-size:12px;color:var(--gold);}
+  .session-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:11px 13px;margin-bottom:8px;}
+  .session-top{display:flex;justify-content:space-between;align-items:center;}
+  .session-type{font-size:11px;font-weight:500;letter-spacing:1px;}
+  .session-type.tournament{color:var(--amber);}
+  .session-type.cash{color:var(--green);}
+  .session-rake{font-size:16px;color:var(--green);}
+  .session-meta{font-size:10px;color:var(--muted);margin-top:3px;}
+  .session-split{display:flex;gap:12px;margin-top:6px;padding-top:6px;border-top:1px solid var(--border);}
+  .split-pill{font-size:10px;color:var(--muted);}
+  .split-pill span{color:var(--gold2);}
+  .session-del{background:none;border:none;color:var(--muted2);cursor:pointer;font-size:14px;padding:0 2px;}
+
+  /* WITHDRAW MODAL */
+  .modal-overlay{position:fixed;inset:0;background:#000a;z-index:200;display:flex;align-items:flex-end;justify-content:center;}
+  .modal{background:#12131a;border:1px solid var(--border);border-radius:16px 16px 0 0;padding:20px 18px calc(env(safe-area-inset-bottom,0px)+20px);width:100%;max-width:480px;}
+  .modal-title{font-family:'Playfair Display',serif;font-size:18px;color:var(--gold);margin-bottom:16px;}
+  .modal-field label{display:block;font-size:8px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:5px;}
+  .modal-field input{width:100%;background:var(--bg);border:1px solid var(--muted2);border-radius:6px;color:var(--text);padding:10px;font-size:16px;font-family:'DM Mono',monospace;outline:none;margin-bottom:12px;}
+  .modal-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .modal-btn-cancel{background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:12px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:2px;cursor:pointer;}
+  .modal-btn-confirm{background:linear-gradient(135deg,#7a1a1a,var(--red));border:none;color:#fff;border-radius:8px;padding:12px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:2px;cursor:pointer;}
+
+  /* STATS */
+  .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px;}
+  .stat-card-title{font-size:9px;letter-spacing:3px;color:var(--muted);text-transform:uppercase;margin-bottom:12px;}
+  .bar-row{margin-bottom:10px;}
+  .bar-label-row{display:flex;justify-content:space-between;margin-bottom:4px;}
+  .bar-label{font-size:11px;text-transform:capitalize;letter-spacing:1px;}
+  .bar-val{font-size:11px;color:var(--text);}
+  .bar-bg{height:5px;background:var(--muted2);border-radius:3px;}
+  .bar-fill{height:100%;border-radius:3px;transition:width .5s;}
+  .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .stat-cell{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;}
+  .stat-cell-label{font-size:8px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;}
+  .stat-cell-val{font-size:18px;color:var(--gold);margin-top:4px;}
+
+  .hidden{display:none!important;}
+  .dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:6px;}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-top">
+    <div>
+      <div class="club-name">EasyWithAA · ClubGG</div>
+      <div class="club-title">Club Ledger</div>
+    </div>
+    <div class="total-block">
+      <div class="total-label">Total Rake</div>
+      <div class="total-val" id="totalRake">$0.00</div>
+    </div>
+  </div>
+
+  <div class="split-row">
+    <div class="split-card me">
+      <div class="split-name">Brando</div>
+      <div class="split-gross" id="brandoGross">$0.00 gross</div>
+      <div class="split-withdrawn" id="brandoWithdrawn"></div>
+      <div class="split-net" id="brandoNet">$0.00</div>
+      <button class="btn-withdraw" style="margin-top:8px;" onclick="openWithdraw()">− Withdraw</button>
+    </div>
+    <div class="split-card">
+      <div class="split-name">Matt</div>
+      <div class="split-gross" id="mattGross">$0.00 gross</div>
+      <div class="split-withdrawn" id="mattWithdrawn"></div>
+      <div class="split-net" id="mattNet">$0.00</div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('log',this)">Log</button>
+    <button class="tab" onclick="switchTab('stats',this)">Stats</button>
+  </div>
+</div>
+
+<div class="content" id="tabLog">
+  <button class="btn-primary" id="toggleBtn" onclick="toggleForm()">+ Log Session</button>
+
+  <div class="form-card hidden" id="sessionForm">
+    <div class="form-grid">
+      <div class="field">
+        <label>Date</label>
+        <input type="date" id="fDate"/>
+      </div>
+      <div class="field">
+        <label>Type</label>
+        <select id="fType">
+          <option value="tournament">Tournament</option>
+          <option value="cash">Cash Game</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Players</label>
+        <input type="number" id="fPlayers" placeholder="9" oninput="updatePreview()"/>
+      </div>
+      <div class="field">
+        <label>Total Buy-ins</label>
+        <input type="number" id="fBuyins" placeholder="12" oninput="updatePreview()"/>
+      </div>
+      <div class="field full">
+        <label>Note (optional)</label>
+        <input type="text" id="fNote" placeholder="e.g. 2 rebuys..."/>
+      </div>
+    </div>
+    <div class="rake-preview hidden" id="rakePreview">
+      <div>
+        <div class="rake-preview-label">RAKE PREVIEW</div>
+        <div class="rake-each" id="rakeEach"></div>
+      </div>
+      <div class="rake-preview-val" id="rakeVal"></div>
+    </div>
+    <button class="btn-save" onclick="saveSession()">Save Session</button>
+  </div>
+
+  <div class="quick-strip">
+    <div class="qs-card"><div class="qs-label">Today</div><div class="qs-val" id="qsToday">$0</div></div>
+    <div class="qs-card"><div class="qs-label">Avg/Day</div><div class="qs-val" id="qsAvg">$0</div></div>
+    <div class="qs-card"><div class="qs-label">Sessions</div><div class="qs-val" id="qsCount">0</div></div>
+  </div>
+
+  <div id="sessionLog"></div>
+</div>
+
+<div class="content hidden" id="tabStats">
+  <div class="stat-card">
+    <div class="stat-card-title">Rake by Type</div>
+    <div class="bar-row">
+      <div class="bar-label-row">
+        <span class="bar-label" style="color:#f59e0b;"><span class="dot" style="background:#f59e0b;"></span>Tournament</span>
+        <span class="bar-val" id="statTourney">$0</span>
+      </div>
+      <div class="bar-bg"><div class="bar-fill" id="barTourney" style="background:#f59e0b;width:0%"></div></div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label-row">
+        <span class="bar-label" style="color:#22c97a;"><span class="dot" style="background:#22c97a;"></span>Cash Game</span>
+        <span class="bar-val" id="statCash">$0</span>
+      </div>
+      <div class="bar-bg"><div class="bar-fill" id="barCash" style="background:#22c97a;width:0%"></div></div>
+    </div>
+  </div>
+  <div class="stat-grid">
+    <div class="stat-cell"><div class="stat-cell-label">Days Active</div><div class="stat-cell-val" id="statDays">0</div></div>
+    <div class="stat-cell"><div class="stat-cell-label">Sessions</div><div class="stat-cell-val" id="statSessions">0</div></div>
+    <div class="stat-cell"><div class="stat-cell-label">Avg/Session</div><div class="stat-cell-val" id="statAvgSession">$0</div></div>
+    <div class="stat-cell"><div class="stat-cell-label">Proj. Monthly</div><div class="stat-cell-val" id="statMonthly">$0</div></div>
+    <div class="stat-cell"><div class="stat-cell-label">Brando Withdrawn</div><div class="stat-cell-val" id="statWithdrawn" style="color:#e05555;">$0</div></div>
+    <div class="stat-cell"><div class="stat-cell-label">Brando Balance</div><div class="stat-cell-val" id="statBrandoBalance">$0</div></div>
+  </div>
+</div>
+
+<!-- Withdraw Modal -->
+<div class="modal-overlay hidden" id="withdrawModal">
+  <div class="modal">
+    <div class="modal-title">Withdraw from Rake</div>
+    <div class="modal-field">
+      <label>Amount</label>
+      <input type="number" id="wAmount" placeholder="0.00"/>
+    </div>
+    <div class="modal-field">
+      <label>Note (optional)</label>
+      <input type="text" id="wNote" placeholder="e.g. gas money..."/>
+    </div>
+    <div class="modal-btns">
+      <button class="modal-btn-cancel" onclick="closeWithdraw()">Cancel</button>
+      <button class="modal-btn-confirm" onclick="confirmWithdraw()">Withdraw</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const RAKE_PER_BUYIN = 2;
+let data = JSON.parse(localStorage.getItem('aaLedger') || '{"sessions":[],"withdrawals":[]}');
+
+function save(){localStorage.setItem('aaLedger',JSON.stringify(data));}
+
+function fmt(n){return '$'+Number(n).toFixed(2);}
+function fmtShort(n){return '$'+Math.round(n);}
+
+function today(){return new Date().toISOString().split('T')[0];}
+
+function init(){
+  document.getElementById('fDate').value = today();
+  render();
+}
+
+function render(){
+  const sessions = data.sessions;
+  const withdrawals = data.withdrawals;
+  const totalRake = sessions.reduce((a,s)=>a+s.rake,0);
+  const totalWithdrawn = withdrawals.reduce((a,w)=>a+w.amount,0);
+  const brandoGross = totalRake/2;
+  const brandoNet = brandoGross - totalWithdrawn;
+  const mattGross = totalRake/2;
+
+  document.getElementById('totalRake').textContent = fmt(totalRake);
+  document.getElementById('brandoGross').textContent = fmt(brandoGross)+' gross';
+  document.getElementById('brandoWithdrawn').textContent = totalWithdrawn>0 ? '− '+fmt(totalWithdrawn)+' withdrawn' : '';
+  document.getElementById('brandoNet').textContent = fmt(brandoNet);
+  document.getElementById('mattGross').textContent = fmt(mattGross)+' gross';
+  document.getElementById('mattWithdrawn').textContent = '';
+  document.getElementById('mattNet').textContent = fmt(mattGross);
+
+  // quick strip
+  const todaySessions = sessions.filter(s=>s.date===today());
+  const todayRake = todaySessions.reduce((a,s)=>a+s.rake,0);
+  const days = [...new Set(sessions.map(s=>s.date))].length||1;
+  document.getElementById('qsToday').textContent = fmtShort(todayRake);
+  document.getElementById('qsAvg').textContent = fmtShort(totalRake/days);
+  document.getElementById('qsCount').textContent = sessions.length;
+
+  // stats
+  const tRake = sessions.filter(s=>s.type==='tournament').reduce((a,s)=>a+s.rake,0);
+  const cRake = sessions.filter(s=>s.type==='cash').reduce((a,s)=>a+s.rake,0);
+  document.getElementById('statTourney').textContent = fmt(tRake);
+  document.getElementById('statCash').textContent = fmt(cRake);
+  document.getElementById('barTourney').style.width = totalRake>0 ? (tRake/totalRake*100)+'%' : '0%';
+  document.getElementById('barCash').style.width = totalRake>0 ? (cRake/totalRake*100)+'%' : '0%';
+  document.getElementById('statDays').textContent = days;
+  document.getElementById('statSessions').textContent = sessions.length;
+  document.getElementById('statAvgSession').textContent = sessions.length ? fmtShort(totalRake/sessions.length) : '$0';
+  document.getElementById('statMonthly').textContent = fmtShort(totalRake/days*30);
+  document.getElementById('statWithdrawn').textContent = fmt(totalWithdrawn);
+  document.getElementById('statBrandoBalance').textContent = fmt(brandoNet);
+
+  // session log
+  const grouped = sessions.reduce((acc,s)=>{(acc[s.date]=acc[s.date]||[]).push(s);return acc;},{});
+  const log = document.getElementById('sessionLog');
+  log.innerHTML='';
+  Object.entries(grouped).sort(([a],[b])=>b.localeCompare(a)).forEach(([date,daySessions])=>{
+    const dayTotal = daySessions.reduce((a,s)=>a+s.rake,0);
+    const dLabel = new Date(date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+    let html = `<div class="day-header"><span class="day-date">${dLabel}</span><span class="day-total">${fmt(dayTotal)}</span></div>`;
+    daySessions.forEach(s=>{
+      const typeClass = s.type==='tournament'?'tournament':'cash';
+      const typeLabel = s.type==='tournament'?'Tournament':'Cash Game';
+      html += `<div class="session-card">
+        <div class="session-top">
+          <span class="session-type ${typeClass}">${typeLabel}</span>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span class="session-rake">${fmt(s.rake)}</span>
+            <button class="session-del" onclick="deleteSession(${s.id})">✕</button>
+          </div>
+        </div>
+        <div class="session-meta">${s.players} players · ${s.buyins} buy-ins${s.note?' · '+s.note:''}</div>
+        <div class="session-split">
+          <span class="split-pill">Brando <span>${fmt(s.rake/2)}</span></span>
+          <span class="split-pill">Matt <span>${fmt(s.rake/2)}</span></span>
+        </div>
+      </div>`;
+    });
+    log.innerHTML += html;
+  });
+
+  // withdrawals in log
+  if(withdrawals.length>0){
+    let wHtml = `<div class="day-header" style="margin-top:8px;"><span class="day-date" style="color:#e05555;">Withdrawals</span></div>`;
+    withdrawals.slice().reverse().forEach(w=>{
+      wHtml += `<div class="session-card" style="border-color:#3a1010;">
+        <div class="session-top">
+          <span style="font-size:11px;color:#e05555;">− Withdraw</span>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:16px;color:#e05555;">−${fmt(w.amount)}</span>
+            <button class="session-del" onclick="deleteWithdrawal(${w.id})">✕</button>
+          </div>
+        </div>
+        <div class="session-meta">${w.date}${w.note?' · '+w.note:''}</div>
+      </div>`;
+    });
+    log.innerHTML += wHtml;
+  }
+}
+
+function toggleForm(){
+  const form = document.getElementById('sessionForm');
+  const btn = document.getElementById('toggleBtn');
+  if(form.classList.contains('hidden')){
+    form.classList.remove('hidden');
+    btn.textContent='✕ Cancel';
+    btn.className='btn-cancel';
+  } else {
+    form.classList.add('hidden');
+    btn.textContent='+ Log Session';
+    btn.className='btn-primary';
+  }
+}
+
+function updatePreview(){
+  const buyins = parseInt(document.getElementById('fBuyins').value)||0;
+  const rake = buyins*RAKE_PER_BUYIN;
+  const preview = document.getElementById('rakePreview');
+  if(buyins>0){
+    preview.classList.remove('hidden');
+    document.getElementById('rakeVal').textContent=fmt(rake);
+    document.getElementById('rakeEach').textContent='Brando '+fmt(rake/2)+' · Matt '+fmt(rake/2);
+  } else {
+    preview.classList.add('hidden');
+  }
+}
+
+function saveSession(){
+  const players = parseInt(document.getElementById('fPlayers').value);
+  const buyins = parseInt(document.getElementById('fBuyins').value);
+  if(!players||!buyins) return;
+  const session = {
+    id: Date.now(),
+    date: document.getElementById('fDate').value,
+    type: document.getElementById('fType').value,
+    players, buyins,
+    rake: buyins*RAKE_PER_BUYIN,
+    note: document.getElementById('fNote').value
+  };
+  data.sessions.unshift(session);
+  save();
+  document.getElementById('fPlayers').value='';
+  document.getElementById('fBuyins').value='';
+  document.getElementById('fNote').value='';
+  document.getElementById('rakePreview').classList.add('hidden');
+  toggleForm();
+  render();
+}
+
+function deleteSession(id){
+  if(!confirm('Delete this session?')) return;
+  data.sessions = data.sessions.filter(s=>s.id!==id);
+  save(); render();
+}
+
+function deleteWithdrawal(id){
+  if(!confirm('Delete this withdrawal?')) return;
+  data.withdrawals = data.withdrawals.filter(w=>w.id!==id);
+  save(); render();
+}
+
+function openWithdraw(){document.getElementById('withdrawModal').classList.remove('hidden');}
+function closeWithdraw(){document.getElementById('withdrawModal').classList.add('hidden');document.getElementById('wAmount').value='';document.getElementById('wNote').value='';}
+function confirmWithdraw(){
+  const amount = parseFloat(document.getElementById('wAmount').value);
+  if(!amount||amount<=0) return;
+  data.withdrawals.push({id:Date.now(),date:today(),amount,note:document.getElementById('wNote').value});
+  save(); closeWithdraw(); render();
+}
+
+function switchTab(name,el){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('tabLog').classList.toggle('hidden',name!=='log');
+  document.getElementById('tabStats').classList.toggle('hidden',name!=='stats');
+}
+
+init();
+</script>
+</body>
+</html>
