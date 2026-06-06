@@ -27,7 +27,6 @@
   html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;overscroll-behavior:none;}
   body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;}
 
-  /* HEADER */
   .header{
     background:linear-gradient(160deg,#0d0e14 0%,#141008 100%);
     border-bottom:1px solid var(--border);
@@ -41,7 +40,6 @@
   .total-label{font-size:8px;letter-spacing:3px;color:var(--muted);text-transform:uppercase;}
   .total-val{font-family:'Playfair Display',serif;font-size:26px;color:var(--green);line-height:1.1;}
 
-  /* SPLIT CARDS */
   .split-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 18px 12px;}
   .split-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;}
   .split-card.me{border-color:#c9a84c44;}
@@ -50,21 +48,17 @@
   .split-withdrawn{font-size:10px;color:var(--red);margin-top:1px;}
   .split-net{font-size:18px;font-weight:500;color:var(--green);margin-top:2px;}
 
-  /* TABS */
   .tabs{display:flex;border-bottom:1px solid var(--border);}
   .tab{flex:1;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);padding:9px;font-size:9px;letter-spacing:3px;text-transform:uppercase;cursor:pointer;font-family:'DM Mono',monospace;transition:all .2s;margin-bottom:-1px;}
   .tab.active{color:var(--gold);border-bottom-color:var(--gold);}
 
-  /* CONTENT */
   .content{flex:1;overflow-y:auto;padding:16px 18px;padding-bottom:calc(env(safe-area-inset-bottom,0px) + 20px);}
 
-  /* BUTTONS */
   .btn-primary{width:100%;background:linear-gradient(135deg,#9a7020,#c9a84c);border:none;color:#08090d;border-radius:10px;padding:13px;font-size:11px;font-weight:500;letter-spacing:3px;text-transform:uppercase;cursor:pointer;font-family:'DM Mono',monospace;margin-bottom:14px;}
   .btn-cancel{width:100%;background:var(--surface);border:1px solid var(--gold);color:var(--gold);border-radius:10px;padding:13px;font-size:11px;letter-spacing:3px;text-transform:uppercase;cursor:pointer;font-family:'DM Mono',monospace;margin-bottom:14px;}
   .btn-save{width:100%;background:linear-gradient(135deg,#0d6e3a,#22c97a);border:none;color:#08090d;border-radius:8px;padding:12px;font-size:11px;font-weight:500;letter-spacing:3px;cursor:pointer;font-family:'DM Mono',monospace;}
   .btn-withdraw{background:none;border:1px solid var(--red);color:var(--red);border-radius:6px;padding:5px 10px;font-size:9px;letter-spacing:2px;cursor:pointer;font-family:'DM Mono',monospace;}
 
-  /* FORM */
   .form-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px;}
   .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;}
   .field label{display:block;font-size:8px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;}
@@ -75,13 +69,11 @@
   .rake-preview-val{font-size:18px;color:var(--green);}
   .rake-each{font-size:10px;color:#4a8a60;margin-top:1px;}
 
-  /* QUICK STRIP */
   .quick-strip{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:18px;}
   .qs-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center;}
   .qs-label{font-size:8px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;}
   .qs-val{font-size:16px;color:var(--text);margin-top:3px;}
 
-  /* SESSION LOG */
   .day-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;margin-top:4px;}
   .day-date{font-size:9px;letter-spacing:3px;color:var(--muted);text-transform:uppercase;}
   .day-total{font-size:12px;color:var(--gold);}
@@ -97,7 +89,6 @@
   .split-pill span{color:var(--gold2);}
   .session-del{background:none;border:none;color:var(--muted2);cursor:pointer;font-size:14px;padding:0 2px;}
 
-  /* WITHDRAW MODAL */
   .modal-overlay{position:fixed;inset:0;background:#000a;z-index:200;display:flex;align-items:flex-end;justify-content:center;}
   .modal{background:#12131a;border:1px solid var(--border);border-radius:16px 16px 0 0;padding:20px 18px calc(env(safe-area-inset-bottom,0px)+20px);width:100%;max-width:480px;}
   .modal-title{font-family:'Playfair Display',serif;font-size:18px;color:var(--gold);margin-bottom:16px;}
@@ -107,7 +98,6 @@
   .modal-btn-cancel{background:none;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:12px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:2px;cursor:pointer;}
   .modal-btn-confirm{background:linear-gradient(135deg,#7a1a1a,var(--red));border:none;color:#fff;border-radius:8px;padding:12px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:2px;cursor:pointer;}
 
-  /* STATS */
   .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px;}
   .stat-card-title{font-size:9px;letter-spacing:3px;color:var(--muted);text-transform:uppercase;margin-bottom:12px;}
   .bar-row{margin-bottom:10px;}
@@ -145,13 +135,14 @@
       <div class="split-gross" id="brandoGross">$0.00 gross</div>
       <div class="split-withdrawn" id="brandoWithdrawn"></div>
       <div class="split-net" id="brandoNet">$0.00</div>
-      <button class="btn-withdraw" style="margin-top:8px;" onclick="openWithdraw()">− Withdraw</button>
+      <button class="btn-withdraw" style="margin-top:8px;" onclick="openWithdraw('brando')">- Withdraw</button>
     </div>
     <div class="split-card">
       <div class="split-name">Matt</div>
       <div class="split-gross" id="mattGross">$0.00 gross</div>
       <div class="split-withdrawn" id="mattWithdrawn"></div>
       <div class="split-net" id="mattNet">$0.00</div>
+      <button class="btn-withdraw" style="margin-top:8px;" onclick="openWithdraw('matt')">- Withdraw</button>
     </div>
   </div>
 
@@ -234,13 +225,15 @@
     <div class="stat-cell"><div class="stat-cell-label">Proj. Monthly</div><div class="stat-cell-val" id="statMonthly">$0</div></div>
     <div class="stat-cell"><div class="stat-cell-label">Brando Withdrawn</div><div class="stat-cell-val" id="statWithdrawn" style="color:#e05555;">$0</div></div>
     <div class="stat-cell"><div class="stat-cell-label">Brando Balance</div><div class="stat-cell-val" id="statBrandoBalance">$0</div></div>
+    <div class="stat-cell"><div class="stat-cell-label">Matt Withdrawn</div><div class="stat-cell-val" id="statMattWithdrawn" style="color:#e05555;">$0</div></div>
+    <div class="stat-cell"><div class="stat-cell-label">Matt Balance</div><div class="stat-cell-val" id="statMattBalance">$0</div></div>
   </div>
 </div>
 
-<!-- Withdraw Modal -->
+<!-- Shared Withdraw Modal -->
 <div class="modal-overlay hidden" id="withdrawModal">
   <div class="modal">
-    <div class="modal-title">Withdraw from Rake</div>
+    <div class="modal-title" id="withdrawModalTitle">Withdraw from Rake</div>
     <div class="modal-field">
       <label>Amount</label>
       <input type="number" id="wAmount" placeholder="0.00"/>
@@ -258,13 +251,14 @@
 
 <script>
 const RAKE_PER_BUYIN = 2;
-let data = JSON.parse(localStorage.getItem('aaLedger') || '{"sessions":[],"withdrawals":[]}');
+let currentWithdrawTarget = 'brando';
+
+let data = JSON.parse(localStorage.getItem('aaLedger') || '{"sessions":[],"withdrawals":[],"mattWithdrawals":[]}');
+if(!data.mattWithdrawals) data.mattWithdrawals = [];
 
 function save(){localStorage.setItem('aaLedger',JSON.stringify(data));}
-
 function fmt(n){return '$'+Number(n).toFixed(2);}
 function fmtShort(n){return '$'+Math.round(n);}
-
 function today(){return new Date().toISOString().split('T')[0];}
 
 function init(){
@@ -275,21 +269,23 @@ function init(){
 function render(){
   const sessions = data.sessions;
   const withdrawals = data.withdrawals;
+  const mattWithdrawals = data.mattWithdrawals;
   const totalRake = sessions.reduce((a,s)=>a+s.rake,0);
   const totalWithdrawn = withdrawals.reduce((a,w)=>a+w.amount,0);
+  const mattTotalWithdrawn = mattWithdrawals.reduce((a,w)=>a+w.amount,0);
   const brandoGross = totalRake/2;
   const brandoNet = brandoGross - totalWithdrawn;
   const mattGross = totalRake/2;
+  const mattNet = mattGross - mattTotalWithdrawn;
 
   document.getElementById('totalRake').textContent = fmt(totalRake);
   document.getElementById('brandoGross').textContent = fmt(brandoGross)+' gross';
-  document.getElementById('brandoWithdrawn').textContent = totalWithdrawn>0 ? '− '+fmt(totalWithdrawn)+' withdrawn' : '';
+  document.getElementById('brandoWithdrawn').textContent = totalWithdrawn>0 ? '- '+fmt(totalWithdrawn)+' withdrawn' : '';
   document.getElementById('brandoNet').textContent = fmt(brandoNet);
   document.getElementById('mattGross').textContent = fmt(mattGross)+' gross';
-  document.getElementById('mattWithdrawn').textContent = '';
-  document.getElementById('mattNet').textContent = fmt(mattGross);
+  document.getElementById('mattWithdrawn').textContent = mattTotalWithdrawn>0 ? '- '+fmt(mattTotalWithdrawn)+' withdrawn' : '';
+  document.getElementById('mattNet').textContent = fmt(mattNet);
 
-  // quick strip
   const todaySessions = sessions.filter(s=>s.date===today());
   const todayRake = todaySessions.reduce((a,s)=>a+s.rake,0);
   const days = [...new Set(sessions.map(s=>s.date))].length||1;
@@ -297,7 +293,6 @@ function render(){
   document.getElementById('qsAvg').textContent = fmtShort(totalRake/days);
   document.getElementById('qsCount').textContent = sessions.length;
 
-  // stats
   const tRake = sessions.filter(s=>s.type==='tournament').reduce((a,s)=>a+s.rake,0);
   const cRake = sessions.filter(s=>s.type==='cash').reduce((a,s)=>a+s.rake,0);
   document.getElementById('statTourney').textContent = fmt(tRake);
@@ -310,8 +305,9 @@ function render(){
   document.getElementById('statMonthly').textContent = fmtShort(totalRake/days*30);
   document.getElementById('statWithdrawn').textContent = fmt(totalWithdrawn);
   document.getElementById('statBrandoBalance').textContent = fmt(brandoNet);
+  document.getElementById('statMattWithdrawn').textContent = fmt(mattTotalWithdrawn);
+  document.getElementById('statMattBalance').textContent = fmt(mattNet);
 
-  // session log
   const grouped = sessions.reduce((acc,s)=>{(acc[s.date]=acc[s.date]||[]).push(s);return acc;},{});
   const log = document.getElementById('sessionLog');
   log.innerHTML='';
@@ -327,10 +323,10 @@ function render(){
           <span class="session-type ${typeClass}">${typeLabel}</span>
           <div style="display:flex;align-items:center;gap:10px;">
             <span class="session-rake">${fmt(s.rake)}</span>
-            <button class="session-del" onclick="deleteSession(${s.id})">✕</button>
+            <button class="session-del" onclick="deleteSession(${s.id})">x</button>
           </div>
         </div>
-        <div class="session-meta">${s.players} players · ${s.buyins} buy-ins${s.note?' · '+s.note:''}</div>
+        <div class="session-meta">${s.players} players - ${s.buyins} buy-ins${s.note?' - '+s.note:''}</div>
         <div class="session-split">
           <span class="split-pill">Brando <span>${fmt(s.rake/2)}</span></span>
           <span class="split-pill">Matt <span>${fmt(s.rake/2)}</span></span>
@@ -340,22 +336,38 @@ function render(){
     log.innerHTML += html;
   });
 
-  // withdrawals in log
   if(withdrawals.length>0){
-    let wHtml = `<div class="day-header" style="margin-top:8px;"><span class="day-date" style="color:#e05555;">Withdrawals</span></div>`;
+    let wHtml = `<div class="day-header" style="margin-top:8px;"><span class="day-date" style="color:#e05555;">Brando Withdrawals</span></div>`;
     withdrawals.slice().reverse().forEach(w=>{
       wHtml += `<div class="session-card" style="border-color:#3a1010;">
         <div class="session-top">
-          <span style="font-size:11px;color:#e05555;">− Withdraw</span>
+          <span style="font-size:11px;color:#e05555;">- Brando Withdraw</span>
           <div style="display:flex;align-items:center;gap:10px;">
-            <span style="font-size:16px;color:#e05555;">−${fmt(w.amount)}</span>
-            <button class="session-del" onclick="deleteWithdrawal(${w.id})">✕</button>
+            <span style="font-size:16px;color:#e05555;">-${fmt(w.amount)}</span>
+            <button class="session-del" onclick="deleteWithdrawal('brando',${w.id})">x</button>
           </div>
         </div>
-        <div class="session-meta">${w.date}${w.note?' · '+w.note:''}</div>
+        <div class="session-meta">${w.date}${w.note?' - '+w.note:''}</div>
       </div>`;
     });
     log.innerHTML += wHtml;
+  }
+
+  if(mattWithdrawals.length>0){
+    let mHtml = `<div class="day-header" style="margin-top:8px;"><span class="day-date" style="color:#e05555;">Matt Withdrawals</span></div>`;
+    mattWithdrawals.slice().reverse().forEach(w=>{
+      mHtml += `<div class="session-card" style="border-color:#3a1010;">
+        <div class="session-top">
+          <span style="font-size:11px;color:#e05555;">- Matt Withdraw</span>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:16px;color:#e05555;">-${fmt(w.amount)}</span>
+            <button class="session-del" onclick="deleteWithdrawal('matt',${w.id})">x</button>
+          </div>
+        </div>
+        <div class="session-meta">${w.date}${w.note?' - '+w.note:''}</div>
+      </div>`;
+    });
+    log.innerHTML += mHtml;
   }
 }
 
@@ -364,7 +376,7 @@ function toggleForm(){
   const btn = document.getElementById('toggleBtn');
   if(form.classList.contains('hidden')){
     form.classList.remove('hidden');
-    btn.textContent='✕ Cancel';
+    btn.textContent='x Cancel';
     btn.className='btn-cancel';
   } else {
     form.classList.add('hidden');
@@ -380,7 +392,7 @@ function updatePreview(){
   if(buyins>0){
     preview.classList.remove('hidden');
     document.getElementById('rakeVal').textContent=fmt(rake);
-    document.getElementById('rakeEach').textContent='Brando '+fmt(rake/2)+' · Matt '+fmt(rake/2);
+    document.getElementById('rakeEach').textContent='Brando '+fmt(rake/2)+' - Matt '+fmt(rake/2);
   } else {
     preview.classList.add('hidden');
   }
@@ -414,18 +426,37 @@ function deleteSession(id){
   save(); render();
 }
 
-function deleteWithdrawal(id){
+function deleteWithdrawal(who, id){
   if(!confirm('Delete this withdrawal?')) return;
-  data.withdrawals = data.withdrawals.filter(w=>w.id!==id);
+  if(who==='matt'){
+    data.mattWithdrawals = data.mattWithdrawals.filter(w=>w.id!==id);
+  } else {
+    data.withdrawals = data.withdrawals.filter(w=>w.id!==id);
+  }
   save(); render();
 }
 
-function openWithdraw(){document.getElementById('withdrawModal').classList.remove('hidden');}
-function closeWithdraw(){document.getElementById('withdrawModal').classList.add('hidden');document.getElementById('wAmount').value='';document.getElementById('wNote').value='';}
+function openWithdraw(who){
+  currentWithdrawTarget = who;
+  document.getElementById('withdrawModalTitle').textContent = who==='matt' ? "Matt's Withdrawal" : "Brando's Withdrawal";
+  document.getElementById('withdrawModal').classList.remove('hidden');
+}
+
+function closeWithdraw(){
+  document.getElementById('withdrawModal').classList.add('hidden');
+  document.getElementById('wAmount').value='';
+  document.getElementById('wNote').value='';
+}
+
 function confirmWithdraw(){
   const amount = parseFloat(document.getElementById('wAmount').value);
   if(!amount||amount<=0) return;
-  data.withdrawals.push({id:Date.now(),date:today(),amount,note:document.getElementById('wNote').value});
+  const entry = {id:Date.now(),date:today(),amount,note:document.getElementById('wNote').value};
+  if(currentWithdrawTarget==='matt'){
+    data.mattWithdrawals.push(entry);
+  } else {
+    data.withdrawals.push(entry);
+  }
   save(); closeWithdraw(); render();
 }
 
