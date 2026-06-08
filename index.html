@@ -33,14 +33,31 @@
     padding:env(safe-area-inset-top,16px) 18px 0;
     position:sticky;top:0;z-index:100;
   }
-  .header-top{display:flex;justify-content:space-between;align-items:flex-start;padding-top:14px;padding-bottom:12px;}
+  .header-top{display:flex;justify-content:space-between;align-items:flex-start;padding-top:14px;padding-bottom:8px;}
   .club-name{font-size:9px;letter-spacing:4px;color:var(--muted);text-transform:uppercase;margin-bottom:3px;}
   .club-title{font-family:'Playfair Display',serif;font-size:20px;color:var(--gold);line-height:1;}
   .total-block{text-align:right;}
   .total-label{font-size:8px;letter-spacing:3px;color:var(--muted);text-transform:uppercase;}
   .total-val{font-family:'Playfair Display',serif;font-size:26px;color:var(--green);line-height:1.1;}
 
-  .split-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 18px 12px;}
+  /* In Bank bar */
+  .bank-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    background:#0a120e;
+    border:1px solid #1a3528;
+    border-radius:8px;
+    padding:7px 12px;
+    margin-bottom:10px;
+  }
+  .bank-left{display:flex;align-items:center;gap:7px;}
+  .bank-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px #22c97a88;}
+  .bank-label{font-size:8px;letter-spacing:3px;color:#4a8a60;text-transform:uppercase;}
+  .bank-val{font-family:'Playfair Display',serif;font-size:20px;color:var(--green);}
+  .bank-sub{font-size:9px;color:var(--muted);margin-top:1px;}
+
+  .split-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 0 12px;}
   .split-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;}
   .split-card.me{border-color:#c9a84c44;}
   .split-name{font-size:8px;letter-spacing:3px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;}
@@ -127,6 +144,18 @@
       <div class="total-label">Total Rake</div>
       <div class="total-val" id="totalRake">$0.00</div>
     </div>
+  </div>
+
+  <!-- IN BANK ROW -->
+  <div class="bank-row">
+    <div class="bank-left">
+      <div class="bank-dot"></div>
+      <div>
+        <div class="bank-label">In Bank</div>
+        <div class="bank-sub" id="bankSub">unspent rake</div>
+      </div>
+    </div>
+    <div class="bank-val" id="bankVal">$0.00</div>
   </div>
 
   <div class="split-row">
@@ -278,7 +307,35 @@ function render(){
   const mattGross = totalRake/2;
   const mattNet = mattGross - mattTotalWithdrawn;
 
+  // In Bank = total rake minus all withdrawals by both
+  const totalSpent = totalWithdrawn + mattTotalWithdrawn;
+  const inBank = totalRake - totalSpent;
+
   document.getElementById('totalRake').textContent = fmt(totalRake);
+
+  // Update bank display
+  document.getElementById('bankVal').textContent = fmt(inBank);
+  if(totalSpent > 0){
+    document.getElementById('bankSub').textContent = fmt(totalSpent)+' withdrawn total';
+  } else {
+    document.getElementById('bankSub').textContent = 'unspent rake';
+  }
+  // Color bank green normally, amber if low, red if somehow negative
+  const bankEl = document.getElementById('bankVal');
+  if(inBank <= 0){
+    bankEl.style.color = 'var(--red)';
+    document.querySelector('.bank-dot').style.background = 'var(--red)';
+    document.querySelector('.bank-dot').style.boxShadow = '0 0 6px #e0555588';
+  } else if(inBank < totalRake * 0.2){
+    bankEl.style.color = 'var(--amber)';
+    document.querySelector('.bank-dot').style.background = 'var(--amber)';
+    document.querySelector('.bank-dot').style.boxShadow = '0 0 6px #f59e0b88';
+  } else {
+    bankEl.style.color = 'var(--green)';
+    document.querySelector('.bank-dot').style.background = 'var(--green)';
+    document.querySelector('.bank-dot').style.boxShadow = '0 0 6px #22c97a88';
+  }
+
   document.getElementById('brandoGross').textContent = fmt(brandoGross)+' gross';
   document.getElementById('brandoWithdrawn').textContent = totalWithdrawn>0 ? '- '+fmt(totalWithdrawn)+' withdrawn' : '';
   document.getElementById('brandoNet').textContent = fmt(brandoNet);
