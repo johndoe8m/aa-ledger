@@ -255,9 +255,28 @@
 <!-- UNION TAB -->
 <div class="content hidden" id="tabUnion">
   <div class="stat-card" style="margin-bottom:16px;">
+    <div class="stat-card-title">$500 Deposit Payback</div>
+    <div class="bar-row" style="margin-bottom:6px;">
+      <div class="bar-bg"><div class="bar-fill" id="depositBarFill" style="background:var(--gold);width:0%"></div></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:12px;">
+      <span id="depositPaidLabel">$0 paid back</span>
+      <span id="depositRemainingLabel">$500 remaining</span>
+    </div>
+    <div class="week-field">
+      <label>Log a payment toward the $500</label>
+      <div style="display:flex;gap:8px;">
+        <input type="number" id="depositInput" placeholder="0.00" style="flex:1;"/>
+        <button class="btn-withdraw" style="border-color:var(--gold);color:var(--gold);white-space:nowrap;" onclick="logDepositPayment()">+ Log</button>
+      </div>
+    </div>
+    <div id="depositLog" style="margin-top:10px;"></div>
+  </div>
+
+  <div class="stat-card" style="margin-bottom:16px;">
     <div class="stat-card-title">How this works</div>
     <div style="font-size:11px;color:var(--muted);line-height:1.6;">
-      Weeks run Monday through the settlement on Sunday night. Each week below totals the rake you logged, subtracts the $30 flat union fee, and leaves a spot to enter what the union actually paid you at settlement — so you can catch any mismatch fast.
+      Weeks run Monday through the settlement on Sunday night. Each week below totals the rake you logged, subtracts the $30/week flat union fee, and leaves a spot to enter what the union actually paid you at settlement — so you can catch any mismatch fast.
     </div>
   </div>
   <div id="unionWeeks"></div>
@@ -321,6 +340,7 @@ let data = JSON.parse(localStorage.getItem('aaLedger') || '{"sessions":[],"withd
 if(!data.mattWithdrawals) data.mattWithdrawals = [];
 if(!data.unionReceived) data.unionReceived = {}; // { weekKey: amount }
 if(!data.unionTax) data.unionTax = {}; // { weekKey: amount } manual tax/rebate entry
+if(!data.deposit) data.deposit = { target: 500, log: [] };
 
 function save(){localStorage.setItem('aaLedger',JSON.stringify(data));}
 function fmt(n){return '$'+Number(n).toFixed(2);}
@@ -481,7 +501,44 @@ function render(){
   renderUnion();
 }
 
+function renderDeposit(){
+  const paid = data.deposit.log.reduce((a,p)=>a+p.amount,0);
+  const target = data.deposit.target;
+  const pct = Math.min(100, (paid/target)*100);
+  document.getElementById('depositBarFill').style.width = pct+'%';
+  document.getElementById('depositPaidLabel').textContent = fmt(paid)+' paid back';
+  document.getElementById('depositRemainingLabel').textContent = fmt(Math.max(0,target-paid))+' remaining';
+  if(paid >= target){
+    document.getElementById('depositBarFill').style.background = 'var(--green)';
+  } else {
+    document.getElementById('depositBarFill').style.background = 'var(--gold)';
+  }
+  const logEl = document.getElementById('depositLog');
+  logEl.innerHTML = '';
+  if(data.deposit.log.length===0){
+    logEl.innerHTML = '<div style="font-size:11px;color:var(--muted);">No payments logged yet.</div>';
+  } else {
+    data.deposit.log.slice().reverse().forEach(p=>{
+      const row = document.createElement('div');
+      row.className = 'week-row';
+      row.innerHTML = `<span>${p.date}</span><span>${fmt(p.amount)}</span>`;
+      logEl.appendChild(row);
+    });
+  }
+}
+
+function logDepositPayment(){
+  const el = document.getElementById('depositInput');
+  const amt = parseFloat(el.value);
+  if(!amt||amt<=0) return;
+  data.deposit.log.push({date:today(), amount:amt});
+  el.value='';
+  save();
+  renderDeposit();
+}
+
 function renderUnion(){
+  renderDeposit();
   const sessions = data.sessions;
   const byWeek = {};
   sessions.forEach(s=>{
