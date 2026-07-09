@@ -66,7 +66,7 @@
   .split-net{font-size:18px;font-weight:500;color:var(--green);margin-top:2px;}
 
   .tabs{display:flex;border-bottom:1px solid var(--border);}
-  .tab{flex:1;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);padding:9px;font-size:9px;letter-spacing:3px;text-transform:uppercase;cursor:pointer;font-family:'DM Mono',monospace;transition:all .2s;margin-bottom:-1px;}
+  .tab{flex:1;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);padding:9px 4px;font-size:9px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;font-family:'DM Mono',monospace;transition:all .2s;margin-bottom:-1px;}
   .tab.active{color:var(--gold);border-bottom-color:var(--gold);}
 
   .content{flex:1;overflow-y:auto;padding:16px 18px;padding-bottom:calc(env(safe-area-inset-bottom,0px) + 20px);}
@@ -128,6 +128,24 @@
   .stat-cell-label{font-size:8px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;}
   .stat-cell-val{font-size:18px;color:var(--gold);margin-top:4px;}
 
+  /* Union tab additions */
+  .week-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px;}
+  .week-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;}
+  .week-label{font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;}
+  .week-current{color:var(--gold2);}
+  .week-rake{font-family:'Playfair Display',serif;font-size:20px;color:var(--green);}
+  .week-row{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);padding:5px 0;border-top:1px dashed var(--border);}
+  .week-row span:last-child{color:var(--text);}
+  .week-row.total{border-top:1px solid var(--border);margin-top:2px;padding-top:8px;}
+  .week-row.total span:last-child{color:var(--gold);font-size:13px;}
+  .week-field{margin-top:10px;}
+  .week-field label{display:block;font-size:8px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;}
+  .week-field input{width:100%;background:var(--bg);border:1px solid var(--muted2);border-radius:6px;color:var(--text);padding:8px 10px;font-size:13px;font-family:'DM Mono',monospace;outline:none;}
+  .week-diff{margin-top:8px;font-size:11px;padding:8px 10px;border-radius:8px;text-align:center;letter-spacing:1px;}
+  .week-diff.match{background:#0a1a10;color:var(--green);border:1px solid #22c97a44;}
+  .week-diff.off{background:#1a0d0d;color:var(--red);border:1px solid #e0555544;}
+  .week-diff.pending{background:#12131a;color:var(--muted);border:1px solid var(--border);}
+
   .hidden{display:none!important;}
   .dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:6px;}
 </style>
@@ -177,6 +195,7 @@
 
   <div class="tabs">
     <button class="tab active" onclick="switchTab('log',this)">Log</button>
+    <button class="tab" onclick="switchTab('union',this)">Union</button>
     <button class="tab" onclick="switchTab('stats',this)">Stats</button>
   </div>
 </div>
@@ -233,6 +252,17 @@
   <div id="sessionLog"></div>
 </div>
 
+<!-- UNION TAB -->
+<div class="content hidden" id="tabUnion">
+  <div class="stat-card" style="margin-bottom:16px;">
+    <div class="stat-card-title">How this works</div>
+    <div style="font-size:11px;color:var(--muted);line-height:1.6;">
+      Weeks run Monday through the settlement on Sunday night. Each week below totals the rake you logged, subtracts the $30 flat union fee, and leaves a spot to enter what the union actually paid you at settlement — so you can catch any mismatch fast.
+    </div>
+  </div>
+  <div id="unionWeeks"></div>
+</div>
+
 <div class="content hidden" id="tabStats">
   <div class="stat-card">
     <div class="stat-card-title">Rake by Type</div>
@@ -284,15 +314,36 @@
 
 <script>
 const RAKE_PER_BUYIN = 2;
+const UNION_WEEKLY_FEE = 30;
 let currentWithdrawTarget = 'brando';
 
 let data = JSON.parse(localStorage.getItem('aaLedger') || '{"sessions":[],"withdrawals":[],"mattWithdrawals":[]}');
 if(!data.mattWithdrawals) data.mattWithdrawals = [];
+if(!data.unionReceived) data.unionReceived = {}; // { weekKey: amount }
+if(!data.unionTax) data.unionTax = {}; // { weekKey: amount } manual tax/rebate entry
 
 function save(){localStorage.setItem('aaLedger',JSON.stringify(data));}
 function fmt(n){return '$'+Number(n).toFixed(2);}
 function fmtShort(n){return '$'+Math.round(n);}
 function today(){return new Date().toISOString().split('T')[0];}
+
+// Week runs Mon-Sun, keyed by that week's Sunday (settlement day)
+function getWeekKey(dateStr){
+  const d = new Date(dateStr+'T12:00:00');
+  const day = d.getDay(); // 0=Sun...6=Sat
+  const daysUntilSunday = (7 - day) % 7;
+  const sunday = new Date(d);
+  sunday.setDate(d.getDate()+daysUntilSunday);
+  return sunday.toISOString().split('T')[0];
+}
+function currentWeekKey(){ return getWeekKey(today()); }
+function weekRangeLabel(sundayKey){
+  const sunday = new Date(sundayKey+'T12:00:00');
+  const monday = new Date(sunday);
+  monday.setDate(sunday.getDate()-6);
+  const opts = {month:'short',day:'numeric'};
+  return monday.toLocaleDateString('en-US',opts)+' – '+sunday.toLocaleDateString('en-US',opts);
+}
 
 function init(){
   document.getElementById('fDate').value = today();
@@ -311,20 +362,16 @@ function render(){
   const mattGross = totalRake/2;
   const mattNet = mattGross - mattTotalWithdrawn;
 
-  // In Bank = total rake minus all withdrawals by both
   const totalSpent = totalWithdrawn + mattTotalWithdrawn;
   const inBank = totalRake - totalSpent;
 
   document.getElementById('totalRake').textContent = fmt(totalRake);
-
-  // Update bank display
   document.getElementById('bankVal').textContent = fmt(inBank);
   if(totalSpent > 0){
     document.getElementById('bankSub').textContent = fmt(totalSpent)+' withdrawn total';
   } else {
     document.getElementById('bankSub').textContent = 'unspent rake';
   }
-  // Color bank green normally, amber if low, red if somehow negative
   const bankEl = document.getElementById('bankVal');
   if(inBank <= 0){
     bankEl.style.color = 'var(--red)';
@@ -430,6 +477,83 @@ function render(){
     });
     log.innerHTML += mHtml;
   }
+
+  renderUnion();
+}
+
+function renderUnion(){
+  const sessions = data.sessions;
+  const byWeek = {};
+  sessions.forEach(s=>{
+    const wk = getWeekKey(s.date);
+    byWeek[wk] = (byWeek[wk]||0) + s.rake;
+  });
+  const curWeek = currentWeekKey();
+  if(!(curWeek in byWeek)) byWeek[curWeek] = 0; // always show current week even with no sessions yet
+
+  const weeks = Object.keys(byWeek).sort((a,b)=>b.localeCompare(a));
+  const container = document.getElementById('unionWeeks');
+  container.innerHTML = '';
+
+  if(weeks.length===0){
+    container.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px 0;">Log a session to start tracking weeks.</div>';
+    return;
+  }
+
+  weeks.forEach(wk=>{
+    const rake = byWeek[wk];
+    const isCurrent = wk === curWeek;
+    const tax = data.unionTax[wk] ?? 0;
+    const net = rake - UNION_WEEKLY_FEE - tax;
+    const received = data.unionReceived[wk];
+
+    const card = document.createElement('div');
+    card.className = 'week-card';
+
+    let diffHtml = '';
+    if(received === undefined || received === null || received === ''){
+      diffHtml = `<div class="week-diff pending">Awaiting union settlement entry</div>`;
+    } else {
+      const diff = received - net;
+      if(Math.abs(diff) < 0.01){
+        diffHtml = `<div class="week-diff match">✓ Matches your numbers</div>`;
+      } else {
+        const dir = diff > 0 ? 'more' : 'less';
+        diffHtml = `<div class="week-diff off">Off by ${fmt(Math.abs(diff))} (union paid ${dir} than expected)</div>`;
+      }
+    }
+
+    card.innerHTML = `
+      <div class="week-head">
+        <span class="week-label ${isCurrent?'week-current':''}">${isCurrent?'This week · ':''}${weekRangeLabel(wk)}</span>
+        <span class="week-rake">${fmt(rake)}</span>
+      </div>
+      <div class="week-row"><span>Rake generated</span><span>${fmt(rake)}</span></div>
+      <div class="week-row"><span>Union fee ($30/wk)</span><span>-${fmt(UNION_WEEKLY_FEE)}</span></div>
+      <div class="week-row">
+        <span>Tax/rebate (usually $0)</span>
+        <span><input type="number" step="0.01" value="${tax}" style="width:70px;background:var(--bg);border:1px solid var(--muted2);border-radius:4px;color:var(--text);padding:3px 6px;font-family:'DM Mono',monospace;font-size:11px;text-align:right;" onchange="setUnionTax('${wk}', this.value)"/></span>
+      </div>
+      <div class="week-row total"><span>Expected net (club, both partners)</span><span>${fmt(net)}</span></div>
+      <div class="week-field">
+        <label>What the union actually paid at settlement</label>
+        <input type="number" step="0.01" placeholder="Enter after Sunday settlement" value="${received ?? ''}" onchange="setUnionReceived('${wk}', this.value)"/>
+      </div>
+      ${diffHtml}
+    `;
+    container.appendChild(card);
+  });
+}
+
+function setUnionReceived(wk, val){
+  data.unionReceived[wk] = val === '' ? null : parseFloat(val);
+  save();
+  renderUnion();
+}
+function setUnionTax(wk, val){
+  data.unionTax[wk] = val === '' ? 0 : parseFloat(val);
+  save();
+  renderUnion();
 }
 
 function toggleForm(){
@@ -546,6 +670,7 @@ function switchTab(name,el){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   el.classList.add('active');
   document.getElementById('tabLog').classList.toggle('hidden',name!=='log');
+  document.getElementById('tabUnion').classList.toggle('hidden',name!=='union');
   document.getElementById('tabStats').classList.toggle('hidden',name!=='stats');
 }
 
