@@ -40,6 +40,20 @@
   .total-label{font-size:8px;letter-spacing:3px;color:var(--muted);text-transform:uppercase;}
   .total-val{font-family:'Playfair Display',serif;font-size:26px;color:var(--green);line-height:1.1;}
 
+  /* Storage warning banner */
+  .storage-banner{
+    display:none;
+    background:#2a1508;
+    border:1px solid #7a4a1a;
+    border-radius:8px;
+    padding:8px 12px;
+    margin-bottom:10px;
+    font-size:10px;
+    line-height:1.5;
+    color:var(--amber);
+  }
+  .storage-banner.show{display:block;}
+
   /* In Bank bar */
   .bank-row{
     display:flex;
@@ -164,6 +178,10 @@
     </div>
   </div>
 
+  <div class="storage-banner" id="storageBanner">
+    ⚠ Your browser is blocking saved storage (common in Messages/Telegram in-app browsers). Your entries will only last for this session — open this page in Safari or Chrome directly to save permanently.
+  </div>
+
   <!-- IN BANK ROW -->
   <div class="bank-row">
     <div class="bank-left">
@@ -228,6 +246,15 @@
         <label>Total Rake ($)</label>
         <input type="number" id="fCashRake" placeholder="20.00" step="0.01" oninput="updatePreview()"/>
       </div>
+      <div class="field">
+        <label>Payment Method</label>
+        <select id="fPayMethod" onchange="updatePreview()">
+          <option value="venmo">Venmo</option>
+          <option value="zelle">Zelle</option>
+          <option value="cashapp">Cash App</option>
+          <option value="crypto">Crypto</option>
+        </select>
+      </div>
       <div class="field full">
         <label>Note (optional)</label>
         <input type="text" id="fNote" placeholder="e.g. 2 rebuys..."/>
@@ -239,6 +266,16 @@
         <div class="rake-each" id="rakeEach"></div>
       </div>
       <div class="rake-preview-val" id="rakeVal"></div>
+    </div>
+    <div class="rake-preview hidden" id="cryptoPreview" style="border-color:#c9a84c44;background:#1a1408;">
+      <div>
+        <div class="rake-preview-label" style="color:#c9a84c;">CRYPTO FEE SAVINGS (5%)</div>
+        <div class="rake-each" style="color:#c9a84c;">vs. Venmo/Zelle/Cash App fees</div>
+      </div>
+      <div class="rake-preview-val" id="cryptoSavingsVal" style="color:#c9a84c;"></div>
+    </div>
+    <div class="rake-preview hidden" id="formError" style="border-color:#e0555588;background:#1a0d0d;">
+      <div class="rake-preview-label" style="color:#e05555;" id="formErrorText"></div>
     </div>
     <button class="btn-save" onclick="saveSession()">Save Session</button>
   </div>
@@ -283,6 +320,13 @@
 </div>
 
 <div class="content hidden" id="tabStats">
+  <div class="stat-card" style="border-color:#c9a84c44;">
+    <div class="stat-card-title" style="color:#c9a84c;">Crypto Fee Savings</div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;">
+      <div style="font-size:10px;color:var(--muted);">Saved by taking buy-ins in crypto instead of Venmo/Zelle/Cash App</div>
+      <div class="week-rake" style="color:#c9a84c;" id="statCryptoSavings">$0</div>
+    </div>
+  </div>
   <div class="stat-card">
     <div class="stat-card-title">Rake by Type</div>
     <div class="bar-row">
@@ -336,15 +380,62 @@ const RAKE_PER_BUYIN = 2;
 const UNION_WEEKLY_FEE = 30;
 let currentWithdrawTarget = 'brando';
 
-let data = JSON.parse(localStorage.getItem('aaLedger') || '{"sessions":[],"withdrawals":[],"mattWithdrawals":[]}');
+// ---- Safe storage wrapper ----
+// Some in-app browsers (Messages/Telegram/Instagram links) load pages in a
+// sandboxed "opaque origin" mode where localStorage throws a SecurityError
+// on every access. If that happens we fall back to an in-memory object so
+// the app keeps working for the current visit, and we show a banner so the
+// user knows their data won't persist until they open it in a real browser.
+let storageAvailable = true;
+let memoryFallback = {};
+
+function storageGet(key){
+  try{
+    return localStorage.getItem(key);
+  }catch(e){
+    storageAvailable = false;
+    return memoryFallback[key] ?? null;
+  }
+}
+function storageSet(key, value){
+  try{
+    localStorage.setItem(key, value);
+  }catch(e){
+    storageAvailable = false;
+    memoryFallback[key] = value;
+  }
+}
+function showStorageBannerIfNeeded(){
+  const banner = document.getElementById('storageBanner');
+  if(!storageAvailable){
+    banner.classList.add('show');
+  } else {
+    banner.classList.remove('show');
+  }
+}
+// ---- End safe storage wrapper ----
+
+let data;
+try{
+  data = JSON.parse(storageGet('aaLedger') || '{"sessions":[],"withdrawals":[],"mattWithdrawals":[]}');
+}catch(e){
+  // Corrupted or unreadable saved data - don't let it crash the app
+  data = {sessions:[],withdrawals:[],mattWithdrawals:[]};
+}
 if(!data.mattWithdrawals) data.mattWithdrawals = [];
 if(!data.unionReceived) data.unionReceived = {}; // { weekKey: amount }
 if(!data.unionTax) data.unionTax = {}; // { weekKey: amount } manual tax/rebate entry
 if(!data.deposit) data.deposit = { target: 500, log: [] };
 
-function save(){localStorage.setItem('aaLedger',JSON.stringify(data));}
+function save(){
+  storageSet('aaLedger', JSON.stringify(data));
+  showStorageBannerIfNeeded();
+}
 function fmt(n){return '$'+Number(n).toFixed(2);}
 function fmtShort(n){return '$'+Math.round(n);}
+function payMethodLabel(m){
+  return {venmo:'Venmo',zelle:'Zelle',cashapp:'Cash App',crypto:'Crypto'}[m] || m;
+}
 function today(){return new Date().toISOString().split('T')[0];}
 
 // Week runs Mon-Sun, keyed by that week's Sunday (settlement day)
@@ -367,6 +458,7 @@ function weekRangeLabel(sundayKey){
 
 function init(){
   document.getElementById('fDate').value = today();
+  showStorageBannerIfNeeded();
   render();
 }
 
@@ -431,6 +523,8 @@ function render(){
   document.getElementById('statSessions').textContent = sessions.length;
   document.getElementById('statAvgSession').textContent = sessions.length ? fmtShort(totalRake/sessions.length) : '$0';
   document.getElementById('statMonthly').textContent = fmtShort(totalRake/days*30);
+  const totalCryptoSavings = sessions.reduce((a,s)=>a+(s.cryptoSavings||0),0);
+  document.getElementById('statCryptoSavings').textContent = fmt(totalCryptoSavings);
   document.getElementById('statWithdrawn').textContent = fmt(totalWithdrawn);
   document.getElementById('statBrandoBalance').textContent = fmt(brandoNet);
   document.getElementById('statMattWithdrawn').textContent = fmt(mattTotalWithdrawn);
@@ -454,7 +548,7 @@ function render(){
             <button class="session-del" onclick="deleteSession(${s.id})">x</button>
           </div>
         </div>
-        <div class="session-meta">${s.players} players${s.buyins?' - '+s.buyins+' buy-ins':''}${s.note?' - '+s.note:''}</div>
+        <div class="session-meta">${s.players} players${s.buyins?' - '+s.buyins+' buy-ins':''}${s.payMethod?' - '+payMethodLabel(s.payMethod):''}${s.note?' - '+s.note:''}</div>
         <div class="session-split">
           <span class="split-pill">Brando <span>${fmt(s.rake/2)}</span></span>
           <span class="split-pill">Matt <span>${fmt(s.rake/2)}</span></span>
@@ -634,9 +728,12 @@ function onTypeChange(){
   updatePreview();
 }
 
+const CRYPTO_SAVINGS_PCT = 0.05;
+
 function updatePreview(){
   const type = document.getElementById('fType').value;
   const preview = document.getElementById('rakePreview');
+  const cryptoPreview = document.getElementById('cryptoPreview');
   let rake = 0;
   if(type==='cash'){
     rake = parseFloat(document.getElementById('fCashRake').value)||0;
@@ -651,25 +748,46 @@ function updatePreview(){
   } else {
     preview.classList.add('hidden');
   }
+  const payMethod = document.getElementById('fPayMethod').value;
+  if(payMethod==='crypto' && rake>0){
+    cryptoPreview.classList.remove('hidden');
+    document.getElementById('cryptoSavingsVal').textContent = fmt(rake*CRYPTO_SAVINGS_PCT);
+  } else {
+    cryptoPreview.classList.add('hidden');
+  }
 }
 
 function saveSession(){
   const type = document.getElementById('fType').value;
   const players = parseInt(document.getElementById('fPlayers').value);
+  const errEl = document.getElementById('formError');
+  const errText = document.getElementById('formErrorText');
   let buyins = null;
   let rake = 0;
   if(type==='cash'){
     rake = parseFloat(document.getElementById('fCashRake').value);
-    if(!players || !rake) return;
+    if(!players || !rake){
+      errText.textContent = !players ? 'Enter number of players.' : 'Enter total rake ($) for this cash game.';
+      errEl.classList.remove('hidden');
+      return;
+    }
   } else {
     buyins = parseInt(document.getElementById('fBuyins').value);
-    if(!players||!buyins) return;
+    if(!players||!buyins){
+      errText.textContent = !players ? 'Enter number of players.' : 'Enter total buy-ins.';
+      errEl.classList.remove('hidden');
+      return;
+    }
     rake = buyins*RAKE_PER_BUYIN;
   }
+  errEl.classList.add('hidden');
+  const payMethod = document.getElementById('fPayMethod').value;
+  const cryptoSavings = payMethod==='crypto' ? rake*CRYPTO_SAVINGS_PCT : 0;
   const session = {
     id: Date.now(),
     date: document.getElementById('fDate').value,
     type, players, buyins, rake,
+    payMethod, cryptoSavings,
     note: document.getElementById('fNote').value
   };
   data.sessions.unshift(session);
@@ -678,7 +796,9 @@ function saveSession(){
   document.getElementById('fBuyins').value='';
   document.getElementById('fCashRake').value='';
   document.getElementById('fNote').value='';
+  document.getElementById('fPayMethod').value='venmo';
   document.getElementById('rakePreview').classList.add('hidden');
+  document.getElementById('cryptoPreview').classList.add('hidden');
   toggleForm();
   render();
 }
