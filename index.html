@@ -244,6 +244,10 @@
         <input type="date" id="fDate"/>
       </div>
       <div class="field">
+        <label>Time</label>
+        <input type="time" id="fTime"/>
+      </div>
+      <div class="field">
         <label>Type</label>
         <select id="fType" onchange="onTypeChange()">
           <option value="tournament">Tournament</option>
@@ -299,7 +303,7 @@
   <!-- DAILY RECONCILIATION -->
   <div class="recon-card">
     <div class="recon-title">Daily Reconciliation</div>
-    <div class="recon-sub">Pull the "1 Day" Total Fee from ClubGG's Club Data screen for a given date, drop it in here — it'll check it against whatever you've logged for that same day. One number, no game-by-game matching.</div>
+    <div class="recon-sub">Pull the "1 Day" Total Fee from ClubGG's Club Data screen for a given date, drop it in here — it'll check it against whatever you've logged for that ClubGG day (ClubGG's day runs on UTC-7, so this accounts for the offset automatically).</div>
     <div class="recon-grid">
       <div class="field">
         <label>Date</label>
@@ -416,11 +420,6 @@ const UNION_WEEKLY_FEE = 30;
 let currentWithdrawTarget = 'brando';
 
 // ---- Safe storage wrapper ----
-// Some in-app browsers (Messages/Telegram/Instagram links) load pages in a
-// sandboxed "opaque origin" mode where localStorage throws a SecurityError
-// on every access. If that happens we fall back to an in-memory object so
-// the app keeps working for the current visit, and we show a banner so the
-// user knows their data won't persist until they open it in a real browser.
 let storageAvailable = true;
 let memoryFallback = {};
 
@@ -454,14 +453,13 @@ let data;
 try{
   data = JSON.parse(storageGet('aaLedger') || '{"sessions":[],"withdrawals":[],"mattWithdrawals":[]}');
 }catch(e){
-  // Corrupted or unreadable saved data - don't let it crash the app
   data = {sessions:[],withdrawals:[],mattWithdrawals:[]};
 }
 if(!data.mattWithdrawals) data.mattWithdrawals = [];
-if(!data.unionReceived) data.unionReceived = {}; // { weekKey: amount }
-if(!data.unionTax) data.unionTax = {}; // { weekKey: amount } manual tax/rebate entry
+if(!data.unionReceived) data.unionReceived = {};
+if(!data.unionTax) data.unionTax = {};
 if(!data.deposit) data.deposit = { target: 500, log: [] };
-if(!data.reconChecks) data.reconChecks = []; // [{date, clubgg, logged, diff}]
+if(!data.reconChecks) data.reconChecks = [];
 
 function save(){
   storageSet('aaLedger', JSON.stringify(data));
@@ -472,7 +470,44 @@ function fmtShort(n){return '$'+Math.round(n);}
 function payMethodLabel(m){
   return {venmo:'Venmo',zelle:'Zelle',cashapp:'Cash App',crypto:'Crypto'}[m] || m;
 }
-function today(){return new Date().toISOString().split('T')[0];}
+
+// FIX: use local calendar date, not UTC (old version used toISOString()
+// which converts to UTC first and silently rolls to the "wrong" day for
+// several hours every evening in US timezones).
+function today(){
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+function nowTime(){
+  const d = new Date();
+  const h = String(d.getHours()).padStart(2,'0');
+  const min = String(d.getMinutes()).padStart(2,'0');
+  return `${h}:${min}`;
+}
+
+// ---- ClubGG day bucketing (UTC-7) ----
+// ClubGG's "1 Day" Club Data screen buckets sessions by UTC-7, not your
+// local time. A session logged with a local date+time needs to be shifted
+// into UTC-7 to know which ClubGG day it actually falls under.
+const CLUBGG_UTC_OFFSET_HOURS = -7;
+
+function toClubGGDate(dateStr, timeStr){
+  // dateStr: 'YYYY-MM-DD' in local time, timeStr: 'HH:MM' in local time (24h)
+  // Build a real Date using the browser's local timezone, then read out
+  // what the UTC-7 wall-clock date would be at that same instant.
+  const [y,m,d] = dateStr.split('-').map(Number);
+  const [hh,mm] = (timeStr || '12:00').split(':').map(Number);
+  const localDate = new Date(y, m-1, d, hh, mm); // interpreted in browser's local tz
+  const utcMs = localDate.getTime(); // epoch ms, tz-independent
+  const shifted = new Date(utcMs + CLUBGG_UTC_OFFSET_HOURS*60*60*1000);
+  const yy = shifted.getUTCFullYear();
+  const mo = String(shifted.getUTCMonth()+1).padStart(2,'0');
+  const dd = String(shifted.getUTCDate()).padStart(2,'0');
+  return `${yy}-${mo}-${dd}`;
+}
 
 // Week runs Mon-Sun, keyed by that week's Sunday (settlement day)
 function getWeekKey(dateStr){
@@ -494,6 +529,7 @@ function weekRangeLabel(sundayKey){
 
 function init(){
   document.getElementById('fDate').value = today();
+  document.getElementById('fTime').value = nowTime();
   document.getElementById('rDate').value = today();
   showStorageBannerIfNeeded();
   render();
@@ -585,7 +621,7 @@ function render(){
             <button class="session-del" onclick="deleteSession(${s.id})">x</button>
           </div>
         </div>
-        <div class="session-meta">${s.players} players${s.buyins?' - '+s.buyins+' buy-ins':''}${s.payMethod?' - '+payMethodLabel(s.payMethod):''}${s.note?' - '+s.note:''}</div>
+        <div class="session-meta">${s.time?s.time+' - ':''}${s.players} players${s.buyins?' - '+s.buyins+' buy-ins':''}${s.payMethod?' - '+payMethodLabel(s.payMethod):''}${s.note?' - '+s.note:''}</div>
         <div class="session-split">
           <span class="split-pill">Brando <span>${fmt(s.rake/2)}</span></span>
           <span class="split-pill">Matt <span>${fmt(s.rake/2)}</span></span>
@@ -634,8 +670,13 @@ function render(){
 }
 
 // ---- Daily Reconciliation ----
+// Buckets sessions by their ClubGG-equivalent day (UTC-7), not the raw
+// local date field, so this actually matches what ClubGG's "1 Day" screen
+// shows for the same date.
 function loggedTotalForDate(dateStr){
-  return data.sessions.filter(s=>s.date===dateStr).reduce((a,s)=>a+s.rake,0);
+  return data.sessions
+    .filter(s => toClubGGDate(s.date, s.time) === dateStr)
+    .reduce((a,s)=>a+s.rake,0);
 }
 
 function checkRecon(){
@@ -648,7 +689,6 @@ function checkRecon(){
   const logged = loggedTotalForDate(date);
   const diff = clubgg - logged;
 
-  // save/update this check in history (one per date, latest wins)
   data.reconChecks = data.reconChecks.filter(c=>c.date!==date);
   data.reconChecks.push({date, clubgg, logged, diff});
   save();
@@ -749,7 +789,7 @@ function renderUnion(){
     byWeek[wk] = (byWeek[wk]||0) + s.rake;
   });
   const curWeek = currentWeekKey();
-  if(!(curWeek in byWeek)) byWeek[curWeek] = 0; // always show current week even with no sessions yet
+  if(!(curWeek in byWeek)) byWeek[curWeek] = 0;
 
   const weeks = Object.keys(byWeek).sort((a,b)=>b.localeCompare(a));
   const container = document.getElementById('unionWeeks');
@@ -895,6 +935,7 @@ function saveSession(){
   const session = {
     id: Date.now(),
     date: document.getElementById('fDate').value,
+    time: document.getElementById('fTime').value,
     type, players, buyins, rake,
     payMethod, cryptoSavings,
     note: document.getElementById('fNote').value
@@ -906,6 +947,7 @@ function saveSession(){
   document.getElementById('fCashRake').value='';
   document.getElementById('fNote').value='';
   document.getElementById('fPayMethod').value='venmo';
+  document.getElementById('fTime').value = nowTime();
   document.getElementById('rakePreview').classList.add('hidden');
   document.getElementById('cryptoPreview').classList.add('hidden');
   toggleForm();
