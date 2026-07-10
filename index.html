@@ -160,6 +160,22 @@
   .week-diff.off{background:#1a0d0d;color:var(--red);border:1px solid #e0555544;}
   .week-diff.pending{background:#12131a;color:var(--muted);border:1px solid var(--border);}
 
+  /* Daily Reconciliation */
+  .recon-card{background:var(--surface);border:1px solid #c9a84c44;border-radius:12px;padding:14px;margin-bottom:16px;}
+  .recon-title{font-size:9px;letter-spacing:3px;color:var(--gold);text-transform:uppercase;margin-bottom:4px;}
+  .recon-sub{font-size:10px;color:var(--muted);line-height:1.5;margin-bottom:12px;}
+  .recon-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;}
+  .recon-grid .field{margin:0;}
+  .recon-result{margin-top:4px;}
+  .recon-history{margin-top:10px;}
+  .recon-row{display:flex;justify-content:space-between;align-items:center;font-size:11px;padding:8px 0;border-top:1px dashed var(--border);}
+  .recon-row .rr-date{color:var(--muted);}
+  .recon-row .rr-nums{color:var(--text);text-align:right;}
+  .recon-row .rr-diff{font-size:10px;margin-top:2px;}
+  .recon-row .rr-diff.match{color:var(--green);}
+  .recon-row .rr-diff.off{color:var(--red);}
+  .recon-del{background:none;border:none;color:var(--muted2);cursor:pointer;font-size:13px;padding:0 0 0 8px;}
+
   .hidden{display:none!important;}
   .dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:6px;}
 </style>
@@ -278,6 +294,25 @@
       <div class="rake-preview-label" style="color:#e05555;" id="formErrorText"></div>
     </div>
     <button class="btn-save" onclick="saveSession()">Save Session</button>
+  </div>
+
+  <!-- DAILY RECONCILIATION -->
+  <div class="recon-card">
+    <div class="recon-title">Daily Reconciliation</div>
+    <div class="recon-sub">Pull the "1 Day" Total Fee from ClubGG's Club Data screen for a given date, drop it in here — it'll check it against whatever you've logged for that same day. One number, no game-by-game matching.</div>
+    <div class="recon-grid">
+      <div class="field">
+        <label>Date</label>
+        <input type="date" id="rDate"/>
+      </div>
+      <div class="field">
+        <label>ClubGG Total Fee ($)</label>
+        <input type="number" id="rClubGG" placeholder="0.00" step="0.01"/>
+      </div>
+    </div>
+    <button class="btn-save" style="margin-bottom:0;" onclick="checkRecon()">Check This Day</button>
+    <div class="recon-result" id="reconResult"></div>
+    <div class="recon-history" id="reconHistory"></div>
   </div>
 
   <div class="quick-strip">
@@ -426,6 +461,7 @@ if(!data.mattWithdrawals) data.mattWithdrawals = [];
 if(!data.unionReceived) data.unionReceived = {}; // { weekKey: amount }
 if(!data.unionTax) data.unionTax = {}; // { weekKey: amount } manual tax/rebate entry
 if(!data.deposit) data.deposit = { target: 500, log: [] };
+if(!data.reconChecks) data.reconChecks = []; // [{date, clubgg, logged, diff}]
 
 function save(){
   storageSet('aaLedger', JSON.stringify(data));
@@ -458,6 +494,7 @@ function weekRangeLabel(sundayKey){
 
 function init(){
   document.getElementById('fDate').value = today();
+  document.getElementById('rDate').value = today();
   showStorageBannerIfNeeded();
   render();
 }
@@ -593,7 +630,79 @@ function render(){
   }
 
   renderUnion();
+  renderRecon();
 }
+
+// ---- Daily Reconciliation ----
+function loggedTotalForDate(dateStr){
+  return data.sessions.filter(s=>s.date===dateStr).reduce((a,s)=>a+s.rake,0);
+}
+
+function checkRecon(){
+  const date = document.getElementById('rDate').value;
+  const clubgg = parseFloat(document.getElementById('rClubGG').value);
+  if(!date || isNaN(clubgg)){
+    document.getElementById('reconResult').innerHTML = `<div class="week-diff off">Enter a date and the ClubGG total fee.</div>`;
+    return;
+  }
+  const logged = loggedTotalForDate(date);
+  const diff = clubgg - logged;
+
+  // save/update this check in history (one per date, latest wins)
+  data.reconChecks = data.reconChecks.filter(c=>c.date!==date);
+  data.reconChecks.push({date, clubgg, logged, diff});
+  save();
+
+  renderReconResult(date, clubgg, logged, diff, 'reconResult');
+  document.getElementById('rClubGG').value = '';
+  renderRecon();
+}
+
+function renderReconResult(date, clubgg, logged, diff, targetId){
+  const el = document.getElementById(targetId);
+  const dLabel = new Date(date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+  let cls = 'match', msg = `✓ ${dLabel} matches — logged ${fmt(logged)} vs ClubGG ${fmt(clubgg)}`;
+  if(Math.abs(diff) >= 0.05){
+    cls = 'off';
+    const dir = diff > 0 ? 'under-logged' : 'over-logged';
+    msg = `${dLabel}: you're ${fmt(Math.abs(diff))} ${dir} — logged ${fmt(logged)} vs ClubGG ${fmt(clubgg)}`;
+  }
+  el.innerHTML = `<div class="week-diff ${cls}">${msg}</div>`;
+}
+
+function renderRecon(){
+  const container = document.getElementById('reconHistory');
+  if(!container) return;
+  const checks = data.reconChecks.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  if(checks.length===0){
+    container.innerHTML = '';
+    return;
+  }
+  let html = '';
+  checks.forEach(c=>{
+    const dLabel = new Date(c.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+    const off = Math.abs(c.diff) >= 0.05;
+    const dir = c.diff > 0 ? 'under' : 'over';
+    html += `<div class="recon-row">
+      <div>
+        <div class="rr-date">${dLabel}</div>
+        <div class="rr-diff ${off?'off':'match'}">${off ? fmt(Math.abs(c.diff))+' '+dir+'-logged' : '✓ matches'}</div>
+      </div>
+      <div style="display:flex;align-items:center;">
+        <div class="rr-nums">logged ${fmt(c.logged)}<br/>clubgg ${fmt(c.clubgg)}</div>
+        <button class="recon-del" onclick="deleteReconCheck('${c.date}')">x</button>
+      </div>
+    </div>`;
+  });
+  container.innerHTML = html;
+}
+
+function deleteReconCheck(date){
+  data.reconChecks = data.reconChecks.filter(c=>c.date!==date);
+  save();
+  renderRecon();
+}
+// ---- End Daily Reconciliation ----
 
 function renderDeposit(){
   const paid = data.deposit.log.reduce((a,p)=>a+p.amount,0);
