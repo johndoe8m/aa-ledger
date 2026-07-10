@@ -178,6 +178,22 @@
 
   .hidden{display:none!important;}
   .dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:6px;}
+
+  /* Period filter bar */
+  .filter-bar{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:14px;}
+  .filter-chips{display:flex;gap:6px;flex-wrap:wrap;}
+  .chip{background:var(--bg);border:1px solid var(--muted2);color:var(--muted);border-radius:20px;padding:6px 11px;font-size:9px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;font-family:'DM Mono',monospace;white-space:nowrap;}
+  .chip.active{background:linear-gradient(135deg,#9a7020,#c9a84c);border-color:transparent;color:#08090d;font-weight:500;}
+  .filter-custom{display:flex;align-items:center;gap:6px;margin-top:10px;}
+  .filter-custom input{flex:1;background:var(--bg);border:1px solid var(--muted2);border-radius:6px;color:var(--text);padding:8px;font-size:12px;font-family:'DM Mono',monospace;outline:none;}
+  .filter-custom span{font-size:10px;color:var(--muted);}
+  .filter-custom button{background:var(--gold);border:none;color:#08090d;border-radius:6px;padding:8px 12px;font-size:10px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;font-family:'DM Mono',monospace;}
+  .filter-union-set{margin-top:10px;}
+  .filter-union-set label{display:block;font-size:10px;color:var(--muted);margin-bottom:6px;}
+  .filter-union-set-row{display:flex;gap:6px;}
+  .filter-union-set-row input{flex:1;background:var(--bg);border:1px solid var(--muted2);border-radius:6px;color:var(--text);padding:8px;font-size:12px;font-family:'DM Mono',monospace;outline:none;}
+  .filter-union-set-row button{background:var(--gold);border:none;color:#08090d;border-radius:6px;padding:8px 12px;font-size:10px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;font-family:'DM Mono',monospace;}
+  .filter-label{font-size:10px;color:var(--gold2);margin-top:9px;letter-spacing:0.5px;}
 </style>
 </head>
 <body>
@@ -319,8 +335,31 @@
     <div class="recon-history" id="reconHistory"></div>
   </div>
 
+  <div class="filter-bar" id="filterBar">
+    <div class="filter-chips">
+      <button class="chip active" data-mode="all" onclick="setFilterMode('all')">All Time</button>
+      <button class="chip" data-mode="week" onclick="setFilterMode('week')">This Week</button>
+      <button class="chip" data-mode="union" onclick="setFilterMode('union')">Since Union</button>
+      <button class="chip" data-mode="custom" onclick="setFilterMode('custom')">Custom</button>
+    </div>
+    <div class="filter-custom hidden" id="filterCustomRow">
+      <input type="date" id="filterStart"/>
+      <span>to</span>
+      <input type="date" id="filterEnd"/>
+      <button onclick="applyCustomFilter()">Go</button>
+    </div>
+    <div class="filter-union-set hidden" id="filterUnionSetRow">
+      <label>When did you join the union? (saved so this button always works)</label>
+      <div class="filter-union-set-row">
+        <input type="date" id="unionJoinInput"/>
+        <button onclick="setUnionJoinDate()">Save</button>
+      </div>
+    </div>
+    <div class="filter-label" id="filterActiveLabel"></div>
+  </div>
+
   <div class="quick-strip">
-    <div class="qs-card"><div class="qs-label">Today</div><div class="qs-val" id="qsToday">$0</div></div>
+    <div class="qs-card"><div class="qs-label" id="qsTodayLabel">Today</div><div class="qs-val" id="qsToday">$0</div></div>
     <div class="qs-card"><div class="qs-label">Avg/Day</div><div class="qs-val" id="qsAvg">$0</div></div>
     <div class="qs-card"><div class="qs-label">Sessions</div><div class="qs-val" id="qsCount">0</div></div>
   </div>
@@ -460,6 +499,8 @@ if(!data.unionReceived) data.unionReceived = {};
 if(!data.unionTax) data.unionTax = {};
 if(!data.deposit) data.deposit = { target: 500, log: [] };
 if(!data.reconChecks) data.reconChecks = [];
+if(!data.unionJoinDate) data.unionJoinDate = null;
+if(!data.filter) data.filter = { mode: 'all', start: null, end: null };
 
 function save(){
   storageSet('aaLedger', JSON.stringify(data));
@@ -527,11 +568,107 @@ function weekRangeLabel(sundayKey){
   return monday.toLocaleDateString('en-US',opts)+' – '+sunday.toLocaleDateString('en-US',opts);
 }
 
+// ---- Period filter ----
+function getFilteredSessions(){
+  const {mode, start, end} = data.filter;
+  if(mode==='all' || (!start && !end)) return data.sessions;
+  return data.sessions.filter(s=>{
+    if(start && s.date < start) return false;
+    if(end && s.date > end) return false;
+    return true;
+  });
+}
+
+function fmtChipDate(d){
+  return d ? new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
+}
+
+function filterLabelText(){
+  const {mode, start, end} = data.filter;
+  if(mode==='all') return 'Showing all time';
+  if(mode==='week') return 'Showing this week ('+fmtChipDate(start)+' – today)';
+  if(mode==='union') return 'Showing since you joined the union ('+fmtChipDate(start)+' – today)';
+  if(mode==='custom') return 'Showing '+fmtChipDate(start)+' – '+(end?fmtChipDate(end):'today');
+  return '';
+}
+
+function highlightChip(mode){
+  document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('active', c.dataset.mode===mode));
+}
+
+function mondayOfThisWeek(){
+  const d = new Date();
+  const day = d.getDay(); // 0=Sun
+  const diffToMonday = day===0 ? 6 : day-1;
+  const monday = new Date(d);
+  monday.setDate(d.getDate()-diffToMonday);
+  const y = monday.getFullYear();
+  const m = String(monday.getMonth()+1).padStart(2,'0');
+  const dd = String(monday.getDate()).padStart(2,'0');
+  return `${y}-${m}-${dd}`;
+}
+
+function setFilterMode(mode){
+  document.getElementById('filterUnionSetRow').classList.add('hidden');
+  document.getElementById('filterCustomRow').classList.add('hidden');
+
+  if(mode==='union' && !data.unionJoinDate){
+    // Need a date first — show the inline setter instead of applying anything yet.
+    document.getElementById('filterUnionSetRow').classList.remove('hidden');
+    highlightChip('union');
+    return;
+  }
+
+  data.filter.mode = mode;
+  if(mode==='all'){
+    data.filter.start = null;
+    data.filter.end = null;
+  } else if(mode==='week'){
+    data.filter.start = mondayOfThisWeek();
+    data.filter.end = null;
+  } else if(mode==='union'){
+    data.filter.start = data.unionJoinDate;
+    data.filter.end = null;
+  } else if(mode==='custom'){
+    document.getElementById('filterCustomRow').classList.remove('hidden');
+    if(!data.filter.start) data.filter.start = today();
+    document.getElementById('filterStart').value = data.filter.start;
+    document.getElementById('filterEnd').value = data.filter.end || '';
+  }
+  save();
+  highlightChip(mode);
+  render();
+}
+
+function applyCustomFilter(){
+  data.filter.mode = 'custom';
+  data.filter.start = document.getElementById('filterStart').value || null;
+  data.filter.end = document.getElementById('filterEnd').value || null;
+  save();
+  highlightChip('custom');
+  render();
+}
+
+function setUnionJoinDate(){
+  const val = document.getElementById('unionJoinInput').value;
+  if(!val) return;
+  data.unionJoinDate = val;
+  save();
+  setFilterMode('union');
+}
+// ---- End period filter ----
+
 function init(){
   document.getElementById('fDate').value = today();
   document.getElementById('fTime').value = nowTime();
   document.getElementById('rDate').value = today();
   showStorageBannerIfNeeded();
+  highlightChip(data.filter.mode);
+  if(data.filter.mode==='custom'){
+    document.getElementById('filterCustomRow').classList.remove('hidden');
+    document.getElementById('filterStart').value = data.filter.start || '';
+    document.getElementById('filterEnd').value = data.filter.end || '';
+  }
   render();
 }
 
@@ -579,13 +716,23 @@ function render(){
   document.getElementById('mattWithdrawn').textContent = mattTotalWithdrawn>0 ? '- '+fmt(mattTotalWithdrawn)+' withdrawn' : '';
   document.getElementById('mattNet').textContent = fmt(mattNet);
 
-  const todaySessions = sessions.filter(s=>s.date===today());
-  const todayRake = todaySessions.reduce((a,s)=>a+s.rake,0);
-  const days = [...new Set(sessions.map(s=>s.date))].length||1;
-  document.getElementById('qsToday').textContent = fmtShort(todayRake);
-  document.getElementById('qsAvg').textContent = fmtShort(totalRake/days);
-  document.getElementById('qsCount').textContent = sessions.length;
+  const filteredSessions = getFilteredSessions();
+  const periodRake = filteredSessions.reduce((a,s)=>a+s.rake,0);
+  const periodDays = [...new Set(filteredSessions.map(s=>s.date))].length||1;
+  const qsTodayLabel = document.getElementById('qsTodayLabel');
+  if(data.filter.mode==='all'){
+    qsTodayLabel.textContent = 'Today';
+    const todaySessions = sessions.filter(s=>s.date===today());
+    document.getElementById('qsToday').textContent = fmtShort(todaySessions.reduce((a,s)=>a+s.rake,0));
+  } else {
+    qsTodayLabel.textContent = 'Period';
+    document.getElementById('qsToday').textContent = fmtShort(periodRake);
+  }
+  document.getElementById('qsAvg').textContent = fmtShort(periodRake/periodDays);
+  document.getElementById('qsCount').textContent = filteredSessions.length;
+  document.getElementById('filterActiveLabel').textContent = filterLabelText();
 
+  const days = [...new Set(sessions.map(s=>s.date))].length||1;
   const tRake = sessions.filter(s=>s.type==='tournament').reduce((a,s)=>a+s.rake,0);
   const cRake = sessions.filter(s=>s.type==='cash').reduce((a,s)=>a+s.rake,0);
   document.getElementById('statTourney').textContent = fmt(tRake);
@@ -603,9 +750,12 @@ function render(){
   document.getElementById('statMattWithdrawn').textContent = fmt(mattTotalWithdrawn);
   document.getElementById('statMattBalance').textContent = fmt(mattNet);
 
-  const grouped = sessions.reduce((acc,s)=>{(acc[s.date]=acc[s.date]||[]).push(s);return acc;},{});
+  const grouped = filteredSessions.reduce((acc,s)=>{(acc[s.date]=acc[s.date]||[]).push(s);return acc;},{});
   const log = document.getElementById('sessionLog');
   log.innerHTML='';
+  if(filteredSessions.length===0){
+    log.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:16px 0;">No sessions logged in this period.</div>';
+  }
   Object.entries(grouped).sort(([a],[b])=>b.localeCompare(a)).forEach(([date,daySessions])=>{
     const dayTotal = daySessions.reduce((a,s)=>a+s.rake,0);
     const dLabel = new Date(date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
