@@ -356,6 +356,7 @@
       </div>
     </div>
     <div class="filter-label" id="filterActiveLabel"></div>
+    <button onclick="resetAllData()" style="background:none;border:none;color:#7a3a3a;font-size:9px;letter-spacing:1px;text-decoration:underline;cursor:pointer;font-family:'DM Mono',monospace;margin-top:10px;padding:0;">Reset All Data</button>
   </div>
 
   <div class="quick-strip">
@@ -655,6 +656,28 @@ function setUnionJoinDate(){
   data.unionJoinDate = val;
   save();
   setFilterMode('union');
+}
+
+function resetAllData(){
+  const sure = confirm('This wipes every session, withdrawal, and reconciliation check for good. Screenshot anything you need first. Continue?');
+  if(!sure) return;
+  const reallySure = confirm('Really sure? This can\'t be undone.');
+  if(!reallySure) return;
+  data = {
+    sessions: [],
+    withdrawals: [],
+    mattWithdrawals: [],
+    unionReceived: {},
+    unionTax: {},
+    deposit: { target: 500, log: [] },
+    reconChecks: [],
+    unionJoinDate: '2026-07-08',
+    filter: { mode: 'union', start: '2026-07-08', end: null }
+  };
+  save();
+  highlightChip('union');
+  render();
+  alert('Cleared. Starting fresh from Wed, Jul 8, 2026.');
 }
 // ---- End period filter ----
 
