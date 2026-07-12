@@ -264,6 +264,66 @@
     <div class="close-history" id="checkHistory"></div>
   </div>
 
+  <!-- FLOAT CHECK -->
+  <div class="close-card">
+    <div class="close-title">Float Check</div>
+    <div class="close-sub">Enter what you're actually holding in real money right now, plus Total Member Chips from ClubGG's Counter screen. This tells you if you're covered or short — do it weekly and a gap gets caught small instead of building up. The buffer accounts for normal swings from players winning against other union clubs before settlement clears — it won't flag those as a problem.</div>
+    <div class="close-grid">
+      <div class="field">
+        <label>Cash on Hand ($)</label>
+        <input type="number" id="flCash" placeholder="0.00" step="0.01"/>
+      </div>
+      <div class="field">
+        <label>Venmo ($)</label>
+        <input type="number" id="flVenmo" placeholder="0.00" step="0.01"/>
+      </div>
+      <div class="field">
+        <label>Cash App ($)</label>
+        <input type="number" id="flCashApp" placeholder="0.00" step="0.01"/>
+      </div>
+      <div class="field">
+        <label>Total Member Chips ($)</label>
+        <input type="number" id="flMemberChips" placeholder="0.00" step="0.01"/>
+      </div>
+      <div class="field full">
+        <label>Float Buffer ($) — normal cross-club swing, not a red flag</label>
+        <input type="number" id="flBuffer" placeholder="e.g. 100.00" step="0.01"/>
+      </div>
+    </div>
+    <button class="btn-save" onclick="checkFloat()">Check My Float</button>
+    <div id="floatResult"></div>
+    <div class="close-history" id="floatHistory"></div>
+  </div>
+
+  <!-- IOU TRACKER -->
+  <div class="close-card">
+    <div class="close-title">IOUs</div>
+    <div class="close-sub">Money someone owes you (or you owe someone) that isn't in your accounts yet. Keeps it visible without it getting counted as real money until it actually lands — update your Float Check numbers once it's actually paid.</div>
+    <div class="close-grid">
+      <div class="field">
+        <label>Who</label>
+        <input type="text" id="iouWho" placeholder="Name"/>
+      </div>
+      <div class="field">
+        <label>Amount ($)</label>
+        <input type="number" id="iouAmount" placeholder="0.00" step="0.01"/>
+      </div>
+      <div class="field">
+        <label>Direction</label>
+        <select id="iouDirection">
+          <option value="owed_to_me">They owe me</option>
+          <option value="i_owe">I owe them</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Note (optional)</label>
+        <input type="text" id="iouNote" placeholder="e.g. side bet..."/>
+      </div>
+    </div>
+    <button class="btn-save" onclick="addIOU()">Add IOU</button>
+    <div class="close-history" id="iouList"></div>
+  </div>
+
   <button class="btn-primary" id="toggleBtn" onclick="toggleForm()">+ Log Individual Session</button>
 
   <div class="form-card hidden" id="sessionForm">
@@ -435,6 +495,9 @@ if(!data.unionReceived) data.unionReceived = {};
 if(!data.unionTax) data.unionTax = {};
 if(!data.dayTotals) data.dayTotals = {};
 if(!data.checks) data.checks = {};
+if(!data.floatChecks) data.floatChecks = [];
+if(data.floatBuffer === undefined) data.floatBuffer = 0;
+if(!data.ious) data.ious = [];
 if(!data.filter) data.filter = { mode: 'all', start: null, end: null };
 // old field, kept only so older exports don't error on load; no longer used
 if(!data.reconChecks) data.reconChecks = [];
@@ -579,6 +642,7 @@ function init(){
   document.getElementById('fDate').value = today();
   document.getElementById('fTime').value = nowTime();
   document.getElementById('ckDate').value = today();
+  if(data.floatBuffer) document.getElementById('flBuffer').value = data.floatBuffer;
   showStorageBannerIfNeeded();
   highlightChip(data.filter.mode);
   if(data.filter.mode==='custom'){
@@ -742,6 +806,8 @@ function render(){
   }
 
   renderCheckHistory();
+  renderFloatHistory();
+  renderIOUs();
   renderUnion();
 }
 
@@ -802,6 +868,99 @@ function renderCheckHistory(){
     const off = Math.abs(c.diff) >= 0.01;
     const dir = c.diff > 0 ? 'under' : 'over';
     html += `<div class="close-row"><span class="cr-date">${dLabel}</span><span class="cr-amt" style="color:${off?'var(--red)':'var(--accent)'};">${off?fmt(Math.abs(c.diff))+' '+dir:'✓ match'}</span></div>`;
+  });
+  container.innerHTML = html;
+}
+
+// ---- Float Check ----
+function checkFloat(){
+  const cash = parseFloat(document.getElementById('flCash').value) || 0;
+  const venmo = parseFloat(document.getElementById('flVenmo').value) || 0;
+  const cashapp = parseFloat(document.getElementById('flCashApp').value) || 0;
+  const memberChips = parseFloat(document.getElementById('flMemberChips').value);
+  const bufferInput = document.getElementById('flBuffer').value;
+  const buffer = bufferInput === '' ? (data.floatBuffer || 0) : parseFloat(bufferInput) || 0;
+  if(isNaN(memberChips)){
+    alert('Enter Total Member Chips from ClubGG\'s Counter screen.');
+    return;
+  }
+  data.floatBuffer = buffer;
+  const totalRake = totalRakeAll();
+  const totalWithdrawn = data.withdrawals.reduce((a,w)=>a+w.amount,0) + data.mattWithdrawals.reduce((a,w)=>a+w.amount,0);
+  const inBank = totalRake - totalWithdrawn;
+  const realMoney = cash + venmo + cashapp;
+  const required = memberChips + inBank;
+  const diff = realMoney - required;
+
+  data.floatChecks.unshift({ date: today(), cash, venmo, cashapp, memberChips, inBank, realMoney, required, diff, buffer, checkedAt: Date.now() });
+  data.floatChecks = data.floatChecks.slice(0, 20);
+  save();
+
+  const el = document.getElementById('floatResult');
+  if(diff >= 0){
+    el.innerHTML = `<div class="week-diff match">✓ You're ${fmt(diff)} over — holding ${fmt(realMoney)} against ${fmt(required)} needed</div>`;
+  } else if(Math.abs(diff) <= buffer){
+    el.innerHTML = `<div class="week-diff pending">You're ${fmt(Math.abs(diff))} short — within your ${fmt(buffer)} float buffer, likely just normal cross-club settlement timing. Not a red flag.</div>`;
+  } else {
+    const beyond = Math.abs(diff) - buffer;
+    el.innerHTML = `<div class="week-diff off">You're ${fmt(Math.abs(diff))} short — that's ${fmt(beyond)} beyond your ${fmt(buffer)} buffer, worth digging into</div>`;
+  }
+  renderFloatHistory();
+}
+function renderFloatHistory(){
+  const container = document.getElementById('floatHistory');
+  if(data.floatChecks.length===0){ container.innerHTML=''; return; }
+  let html = '';
+  data.floatChecks.forEach(c=>{
+    const dLabel = new Date(c.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+    const buf = c.buffer || 0;
+    let label, color;
+    if(c.diff >= 0){ label = '✓ '+fmt(c.diff)+' over'; color = 'var(--accent)'; }
+    else if(Math.abs(c.diff) <= buf){ label = fmt(Math.abs(c.diff))+' short (buffer)'; color = 'var(--muted)'; }
+    else { label = fmt(Math.abs(c.diff))+' short'; color = 'var(--red)'; }
+    html += `<div class="close-row"><span class="cr-date">${dLabel}</span><span class="cr-amt" style="color:${color};">${label}</span></div>`;
+  });
+  container.innerHTML = html;
+}
+
+// ---- IOU Tracker ----
+function addIOU(){
+  const who = document.getElementById('iouWho').value.trim();
+  const amount = parseFloat(document.getElementById('iouAmount').value);
+  const direction = document.getElementById('iouDirection').value;
+  const note = document.getElementById('iouNote').value.trim();
+  if(!who || !amount){
+    alert('Enter who and an amount.');
+    return;
+  }
+  data.ious.unshift({ id: Date.now(), who, amount, direction, note, date: today() });
+  save();
+  document.getElementById('iouWho').value='';
+  document.getElementById('iouAmount').value='';
+  document.getElementById('iouNote').value='';
+  renderIOUs();
+}
+function markIOUPaid(id){
+  if(!confirm('Mark this as paid and remove it? Make sure to add it into your Float Check numbers once the real money actually lands.')) return;
+  data.ious = data.ious.filter(i=>i.id!==id);
+  save();
+  renderIOUs();
+}
+function renderIOUs(){
+  const container = document.getElementById('iouList');
+  if(!container) return;
+  if(data.ious.length===0){ container.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0;">No open IOUs.</div>'; return; }
+  let html = '';
+  data.ious.forEach(i=>{
+    const dirLabel = i.direction==='owed_to_me' ? 'owes you' : 'you owe';
+    const color = i.direction==='owed_to_me' ? 'var(--accent)' : 'var(--red)';
+    html += `<div class="close-row">
+      <span class="cr-date">${i.who} ${dirLabel}${i.note?' — '+i.note:''}</span>
+      <span style="display:flex;align-items:center;gap:8px;">
+        <span class="cr-amt" style="color:${color};">${fmt(i.amount)}</span>
+        <button class="session-reopen" onclick="markIOUPaid(${i.id})">Paid</button>
+      </span>
+    </div>`;
   });
   container.innerHTML = html;
 }
