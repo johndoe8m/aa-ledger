@@ -245,15 +245,19 @@
   <!-- CLOSE OUT A DAY -->
   <div class="close-card">
     <div class="close-title">Close Out a Day</div>
-    <div class="close-sub">Pull the "1 Day" Total Fee from ClubGG's Club Data screen for a given date and drop it in here. This becomes that day's official number — no session math, no timezone guessing.</div>
+    <div class="close-sub">Pull the "1 Day" totals from ClubGG's Club Data screen for a given date, split between tournament and cash, and drop them in here. This becomes that day's official numbers — no session math, no timezone guessing, and your rake-by-type stats stay accurate.</div>
     <div class="close-grid">
-      <div class="field">
+      <div class="field full">
         <label>Date</label>
         <input type="date" id="dtDate"/>
       </div>
       <div class="field">
-        <label>ClubGG Total Fee ($)</label>
-        <input type="number" id="dtAmount" placeholder="0.00" step="0.01"/>
+        <label>Tournament Fee ($)</label>
+        <input type="number" id="dtTourney" placeholder="0.00" step="0.01"/>
+      </div>
+      <div class="field">
+        <label>Cash Fee ($)</label>
+        <input type="number" id="dtCash" placeholder="0.00" step="0.01"/>
       </div>
     </div>
     <button class="btn-save" onclick="saveDayTotal()">Close This Day</button>
@@ -279,7 +283,7 @@
           <option value="cash">Cash Game</option>
         </select>
       </div>
-      <div class="field">
+      <div class="field" id="fieldPlayers">
         <label>Players</label>
         <input type="number" id="fPlayers" placeholder="9" oninput="updatePreview()"/>
       </div>
@@ -457,12 +461,16 @@ function nowTime(){
   return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
 
-// ---- Day totals: rake for a date is either a closed day-total, or the
-// sum of individual sessions logged for that date. This is the whole fix:
-// you assign rake to the exact calendar date ClubGG shows you, so there's
-// no timezone bucketing to get wrong.
+// ---- Day totals: rake for a date is either a closed day-total (now split
+// into tournament/cash so type stats stay accurate), or the sum of
+// individual sessions logged for that date. This is the whole fix: you
+// assign rake to the exact calendar date ClubGG shows you, so there's no
+// timezone bucketing to get wrong.
 function rakeForDate(date){
-  if(data.dayTotals[date] !== undefined) return data.dayTotals[date].amount;
+  if(data.dayTotals[date] !== undefined){
+    const d = data.dayTotals[date];
+    return (d.tournament||0) + (d.cash||0);
+  }
   return data.sessions.filter(s=>s.date===date).reduce((a,s)=>a+s.rake,0);
 }
 function allDayDates(){
@@ -471,8 +479,8 @@ function allDayDates(){
 function totalRakeAll(){
   return allDayDates().reduce((a,d)=>a+rakeForDate(d),0);
 }
-function setDayTotal(date, amount){
-  data.dayTotals[date] = { amount, closedAt: Date.now() };
+function setDayTotal(date, tournament, cash){
+  data.dayTotals[date] = { tournament, cash, closedAt: Date.now() };
   save();
 }
 function reopenDay(date){
@@ -626,9 +634,10 @@ function render(){
   document.getElementById('filterActiveLabel').textContent = filterLabelText();
 
   const allDates = allDayDates();
-  const tRake = data.sessions.filter(s=>s.type==='tournament').reduce((a,s)=>a+s.rake,0);
-  const cRake = data.sessions.filter(s=>s.type==='cash').reduce((a,s)=>a+s.rake,0);
-  const dtRake = Object.values(data.dayTotals).reduce((a,d)=>a+d.amount,0);
+  const closedTourney = Object.values(data.dayTotals).reduce((a,d)=>a+(d.tournament||0),0);
+  const closedCash = Object.values(data.dayTotals).reduce((a,d)=>a+(d.cash||0),0);
+  const tRake = data.sessions.filter(s=>s.type==='tournament').reduce((a,s)=>a+s.rake,0) + closedTourney;
+  const cRake = data.sessions.filter(s=>s.type==='cash').reduce((a,s)=>a+s.rake,0) + closedCash;
   document.getElementById('statTourney').textContent = fmt(tRake);
   document.getElementById('statCash').textContent = fmt(cRake);
   document.getElementById('barTourney').style.width = totalRake>0 ? (tRake/totalRake*100)+'%' : '0%';
@@ -659,6 +668,8 @@ function render(){
     let html = `<div class="day-header"><span class="day-date">${dLabel}${badge}</span><span class="day-total">${fmt(dayTotal)}</span></div>`;
 
     if(isClosed){
+      const dt = data.dayTotals[date];
+      const tAmt = dt.tournament||0, cAmt = dt.cash||0;
       html += `<div class="session-card total">
         <div class="session-top">
           <span class="session-type total">Closed Day Total</span>
@@ -666,7 +677,7 @@ function render(){
             <span class="session-rake">${fmt(dayTotal)}</span>
           </div>
         </div>
-        <div class="session-meta">Set from ClubGG's "1 Day" total — pulled straight from the club, no session breakdown.</div>
+        <div class="session-meta">Tournament ${fmt(tAmt)} · Cash ${fmt(cAmt)} — set from ClubGG's "1 Day" totals.</div>
         <div class="session-split">
           <span class="split-pill">Brando <span>${fmt(dayTotal/2)}</span></span>
           <span class="split-pill">Matt <span>${fmt(dayTotal/2)}</span></span>
@@ -685,7 +696,7 @@ function render(){
               <button class="session-del" onclick="deleteSession(${s.id})">x</button>
             </div>
           </div>
-          <div class="session-meta">${s.time?s.time+' - ':''}${s.players} players${s.buyins?' - '+s.buyins+' buy-ins':''}${s.payMethod?' - '+payMethodLabel(s.payMethod):''}${s.note?' - '+s.note:''}</div>
+          <div class="session-meta">${s.time?s.time+' - ':''}${s.players?s.players+' players':''}${s.buyins?' - '+s.buyins+' buy-ins':''}${s.payMethod?' - '+payMethodLabel(s.payMethod):''}${s.note?' - '+s.note:''}</div>
           <div class="session-split">
             <span class="split-pill">Brando <span>${fmt(s.rake/2)}</span></span>
             <span class="split-pill">Matt <span>${fmt(s.rake/2)}</span></span>
@@ -736,11 +747,13 @@ function render(){
 // ---- Close Out a Day ----
 function saveDayTotal(){
   const date = document.getElementById('dtDate').value;
-  const amount = parseFloat(document.getElementById('dtAmount').value);
-  if(!date || isNaN(amount)){
-    alert('Enter a date and the ClubGG total fee.');
+  const tourney = parseFloat(document.getElementById('dtTourney').value) || 0;
+  const cash = parseFloat(document.getElementById('dtCash').value) || 0;
+  if(!date || (tourney===0 && cash===0)){
+    alert('Enter a date and at least one of Tournament Fee or Cash Fee.');
     return;
   }
+  const amount = tourney + cash;
   const hasSessions = data.sessions.some(s=>s.date===date);
   const alreadyClosed = data.dayTotals[date] !== undefined;
   if(hasSessions && !alreadyClosed){
@@ -749,8 +762,9 @@ function saveDayTotal(){
     if(!ok) return;
     data.sessions = data.sessions.filter(s=>s.date!==date);
   }
-  setDayTotal(date, amount);
-  document.getElementById('dtAmount').value = '';
+  setDayTotal(date, tourney, cash);
+  document.getElementById('dtTourney').value = '';
+  document.getElementById('dtCash').value = '';
   render();
 }
 function renderCloseHistory(){
@@ -760,7 +774,9 @@ function renderCloseHistory(){
   let html = '';
   days.forEach(d=>{
     const dLabel = new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
-    html += `<div class="close-row"><span class="cr-date">${dLabel}</span><span class="cr-amt">${fmt(data.dayTotals[d].amount)}</span></div>`;
+    const dt = data.dayTotals[d];
+    const total = (dt.tournament||0) + (dt.cash||0);
+    html += `<div class="close-row"><span class="cr-date">${dLabel} <span style="color:var(--muted);">(T ${fmt(dt.tournament||0)} / C ${fmt(dt.cash||0)})</span></span><span class="cr-amt">${fmt(total)}</span></div>`;
   });
   container.innerHTML = html;
 }
@@ -848,6 +864,7 @@ function onTypeChange(){
   const type = document.getElementById('fType').value;
   document.getElementById('fieldBuyins').classList.toggle('hidden', type==='cash');
   document.getElementById('fieldCashRake').classList.toggle('hidden', type!=='cash');
+  document.getElementById('fieldPlayers').classList.toggle('hidden', type==='cash');
   updatePreview();
 }
 function updatePreview(){
@@ -870,15 +887,16 @@ function saveSession(){
     delete data.dayTotals[date];
   }
   const type = document.getElementById('fType').value;
-  const players = parseInt(document.getElementById('fPlayers').value);
+  const playersRaw = parseInt(document.getElementById('fPlayers').value);
+  const players = type==='cash' ? (playersRaw || null) : playersRaw;
   const errEl = document.getElementById('formError');
   const errText = document.getElementById('formErrorText');
   let buyins = null;
   let rake = 0;
   if(type==='cash'){
     rake = parseFloat(document.getElementById('fCashRake').value);
-    if(!players || !rake){
-      errText.textContent = !players ? 'Enter number of players.' : 'Enter total rake ($) for this cash game.';
+    if(!rake){
+      errText.textContent = 'Enter total rake ($) for this cash game.';
       errEl.classList.remove('hidden');
       return;
     }
