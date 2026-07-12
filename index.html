@@ -256,7 +256,10 @@
         <input type="number" id="ckTotal" placeholder="0.00" step="0.01"/>
       </div>
     </div>
-    <button class="btn-save" onclick="checkDay()">Check This Day</button>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+      <button class="btn-cancel" style="margin-bottom:0;" onclick="checkDay()">Check This Day</button>
+      <button class="btn-save" style="margin-bottom:0;" onclick="closeDay()">Close This Day</button>
+    </div>
     <div id="checkResult"></div>
     <div class="close-history" id="checkHistory"></div>
   </div>
@@ -743,6 +746,25 @@ function render(){
 }
 
 // ---- Check a Day ----
+function closeDay(){
+  const date = document.getElementById('ckDate').value;
+  const total = parseFloat(document.getElementById('ckTotal').value);
+  if(!date || isNaN(total)){
+    alert('Enter a date and the ClubGG total fee.');
+    return;
+  }
+  const hasSessions = data.sessions.some(s=>s.date===date);
+  const alreadyClosed = data.dayTotals[date] !== undefined;
+  if(hasSessions && !alreadyClosed){
+    const existing = rakeForDate(date);
+    const ok = confirm(`This day currently has ${fmt(existing)} logged from individual sessions. Closing it at ${fmt(total)} will replace those sessions with one closed total. Continue?`);
+    if(!ok) return;
+    data.sessions = data.sessions.filter(s=>s.date!==date);
+  }
+  setDayTotal(date, 0, total);
+  document.getElementById('ckTotal').value = '';
+  render();
+}
 function checkDay(){
   const date = document.getElementById('ckDate').value;
   const total = parseFloat(document.getElementById('ckTotal').value);
