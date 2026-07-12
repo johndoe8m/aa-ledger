@@ -242,26 +242,23 @@
 
 <div class="content" id="tabLog">
 
-  <!-- CLOSE OUT A DAY -->
+  <!-- CHECK A DAY -->
   <div class="close-card">
-    <div class="close-title">Close Out a Day</div>
-    <div class="close-sub">Pull the "1 Day" totals from ClubGG's Club Data screen for a given date, split between tournament and cash, and drop them in here. This becomes that day's official numbers — no session math, no timezone guessing, and your rake-by-type stats stay accurate.</div>
+    <div class="close-title">Check a Day</div>
+    <div class="close-sub">Pull the "1 Day" Total Fee from ClubGG's Club Data screen for a given date and drop it in here. It checks that against everything you've already logged for that date and tells you if you're over or under.</div>
     <div class="close-grid">
       <div class="field full">
         <label>Date</label>
-        <input type="date" id="dtDate"/>
+        <input type="date" id="ckDate"/>
       </div>
-      <div class="field">
-        <label>Tournament Fee ($)</label>
-        <input type="number" id="dtTourney" placeholder="0.00" step="0.01"/>
-      </div>
-      <div class="field">
-        <label>Cash Fee ($)</label>
-        <input type="number" id="dtCash" placeholder="0.00" step="0.01"/>
+      <div class="field full">
+        <label>ClubGG Total Fee ($)</label>
+        <input type="number" id="ckTotal" placeholder="0.00" step="0.01"/>
       </div>
     </div>
-    <button class="btn-save" onclick="saveDayTotal()">Close This Day</button>
-    <div class="close-history" id="closeHistory"></div>
+    <button class="btn-save" onclick="checkDay()">Check This Day</button>
+    <div id="checkResult"></div>
+    <div class="close-history" id="checkHistory"></div>
   </div>
 
   <button class="btn-primary" id="toggleBtn" onclick="toggleForm()">+ Log Individual Session</button>
@@ -434,6 +431,7 @@ if(!data.mattWithdrawals) data.mattWithdrawals = [];
 if(!data.unionReceived) data.unionReceived = {};
 if(!data.unionTax) data.unionTax = {};
 if(!data.dayTotals) data.dayTotals = {};
+if(!data.checks) data.checks = {};
 if(!data.filter) data.filter = { mode: 'all', start: null, end: null };
 // old field, kept only so older exports don't error on load; no longer used
 if(!data.reconChecks) data.reconChecks = [];
@@ -577,7 +575,7 @@ function resetAllData(){
 function init(){
   document.getElementById('fDate').value = today();
   document.getElementById('fTime').value = nowTime();
-  document.getElementById('dtDate').value = today();
+  document.getElementById('ckDate').value = today();
   showStorageBannerIfNeeded();
   highlightChip(data.filter.mode);
   if(data.filter.mode==='custom'){
@@ -740,43 +738,48 @@ function render(){
     log.innerHTML += mHtml;
   }
 
-  renderCloseHistory();
+  renderCheckHistory();
   renderUnion();
 }
 
-// ---- Close Out a Day ----
-function saveDayTotal(){
-  const date = document.getElementById('dtDate').value;
-  const tourney = parseFloat(document.getElementById('dtTourney').value) || 0;
-  const cash = parseFloat(document.getElementById('dtCash').value) || 0;
-  if(!date || (tourney===0 && cash===0)){
-    alert('Enter a date and at least one of Tournament Fee or Cash Fee.');
+// ---- Check a Day ----
+function checkDay(){
+  const date = document.getElementById('ckDate').value;
+  const total = parseFloat(document.getElementById('ckTotal').value);
+  if(!date || isNaN(total)){
+    alert('Enter a date and the ClubGG total fee.');
     return;
   }
-  const amount = tourney + cash;
-  const hasSessions = data.sessions.some(s=>s.date===date);
-  const alreadyClosed = data.dayTotals[date] !== undefined;
-  if(hasSessions && !alreadyClosed){
-    const existing = rakeForDate(date);
-    const ok = confirm(`This day currently has ${fmt(existing)} logged from individual sessions. Closing it at ${fmt(amount)} will replace those sessions with one closed total. Continue?`);
-    if(!ok) return;
-    data.sessions = data.sessions.filter(s=>s.date!==date);
-  }
-  setDayTotal(date, tourney, cash);
-  document.getElementById('dtTourney').value = '';
-  document.getElementById('dtCash').value = '';
-  render();
+  const logged = rakeForDate(date);
+  const diff = total - logged;
+  data.checks = data.checks || {};
+  data.checks[date] = { total, logged, diff, checkedAt: Date.now() };
+  save();
+  renderCheckResult(date, total, logged, diff);
+  renderCheckHistory();
 }
-function renderCloseHistory(){
-  const container = document.getElementById('closeHistory');
-  const days = Object.keys(data.dayTotals).sort((a,b)=>b.localeCompare(a));
-  if(days.length===0){ container.innerHTML=''; return; }
+function renderCheckResult(date, total, logged, diff){
+  const el = document.getElementById('checkResult');
+  const dLabel = new Date(date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+  if(Math.abs(diff) < 0.01){
+    el.innerHTML = `<div class="week-diff match">✓ ${dLabel} matches — logged ${fmt(logged)} vs ClubGG ${fmt(total)}</div>`;
+  } else {
+    const dir = diff > 0 ? 'under-logged' : 'over-logged';
+    el.innerHTML = `<div class="week-diff off">${dLabel}: you're ${fmt(Math.abs(diff))} ${dir} — logged ${fmt(logged)} vs ClubGG ${fmt(total)}</div>`;
+  }
+}
+function renderCheckHistory(){
+  const container = document.getElementById('checkHistory');
+  const checks = data.checks || {};
+  const dates = Object.keys(checks).sort((a,b)=>b.localeCompare(a));
+  if(dates.length===0){ container.innerHTML=''; return; }
   let html = '';
-  days.forEach(d=>{
+  dates.forEach(d=>{
+    const c = checks[d];
     const dLabel = new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
-    const dt = data.dayTotals[d];
-    const total = (dt.tournament||0) + (dt.cash||0);
-    html += `<div class="close-row"><span class="cr-date">${dLabel} <span style="color:var(--muted);">(T ${fmt(dt.tournament||0)} / C ${fmt(dt.cash||0)})</span></span><span class="cr-amt">${fmt(total)}</span></div>`;
+    const off = Math.abs(c.diff) >= 0.01;
+    const dir = c.diff > 0 ? 'under' : 'over';
+    html += `<div class="close-row"><span class="cr-date">${dLabel}</span><span class="cr-amt" style="color:${off?'var(--red)':'var(--accent)'};">${off?fmt(Math.abs(c.diff))+' '+dir:'✓ match'}</span></div>`;
   });
   container.innerHTML = html;
 }
