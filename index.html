@@ -162,6 +162,12 @@
   .week-diff.match{background:#0F2A18;color:var(--accent);border:1px solid var(--accent);}
   .week-diff.off{background:#2A1010;color:var(--red);border:1px solid var(--red);}
   .week-diff.pending{background:var(--surface);color:var(--muted);border:1px solid var(--line);}
+  .week-inputs-title{font-size:8px;letter-spacing:2px;color:var(--accent);text-transform:uppercase;margin-top:12px;margin-bottom:6px;}
+  .week-inputs-sub{font-size:9px;color:var(--muted);line-height:1.5;margin-bottom:8px;}
+  .week-input-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:4px;}
+  .week-input-grid .field{margin:0;}
+  .week-input-grid label{display:block;font-size:7px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;}
+  .week-input-grid input{width:100%;background:var(--surface);border:1px solid var(--line);border-radius:5px;color:var(--text);padding:8px 8px;font-size:12px;font-family:'DM Mono',monospace;outline:none;}
 
   .close-card{background:var(--surface2);border:1px solid var(--accent);border-radius:8px;padding:14px;margin-bottom:16px;}
   .close-title{font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--accent);margin-bottom:4px;letter-spacing:.5px;}
@@ -411,7 +417,7 @@
   <div class="stat-card" style="margin-bottom:16px;">
     <div class="stat-card-title">How this works</div>
     <div style="font-size:11px;color:var(--muted);line-height:1.6;">
-      Weeks run Monday through the settlement on Sunday night. Each week below totals the rake you've logged (session entries plus closed-day totals), subtracts the $30/week flat union fee, and leaves a spot to enter what the union actually paid you at settlement — so you can catch any mismatch fast.
+      Weeks run Monday through the settlement on Sunday night. Finest Union settles on Winnings, Tips, and Tipback from their own report — not straight rake — so enter those three numbers once you get the report and this will calculate the deal T/R and expected settlement the same way they do.
     </div>
   </div>
   <div id="unionWeeks"></div>
@@ -467,6 +473,7 @@
 <script>
 const RAKE_PER_BUYIN = 2;
 const UNION_WEEKLY_FEE = 30;
+const UNION_DEAL_PCT = 0.10; // Deal T/R %: 10% of (Winnings + Tips), sign-flipped as rebate/tax
 let currentWithdrawTarget = 'brando';
 
 let storageAvailable = true;
@@ -493,6 +500,9 @@ try{
 if(!data.mattWithdrawals) data.mattWithdrawals = [];
 if(!data.unionReceived) data.unionReceived = {};
 if(!data.unionTax) data.unionTax = {};
+if(!data.unionWinnings) data.unionWinnings = {};
+if(!data.unionTips) data.unionTips = {};
+if(!data.unionTipback) data.unionTipback = {};
 if(!data.dayTotals) data.dayTotals = {};
 if(!data.checks) data.checks = {};
 if(!data.floatChecks) data.floatChecks = [];
@@ -511,6 +521,10 @@ function fmtShort(n){return '$'+Math.round(n);}
 function fmtAcct(n){
   const v = Number(n);
   return v < -0.004 ? '('+fmt(Math.abs(v))+')' : fmt(v);
+}
+function fmtSigned(n){
+  const v = Number(n);
+  return (v<0?'-':'+')+fmt(Math.abs(v));
 }
 function payMethodLabel(m){
   return {venmo:'Venmo',zelle:'Zelle',cashapp:'Cash App',crypto:'Crypto'}[m] || m;
@@ -630,7 +644,7 @@ function resetAllData(){
   if(!reallySure) return;
   data = {
     sessions: [], withdrawals: [], mattWithdrawals: [],
-    unionReceived: {}, unionTax: {},
+    unionReceived: {}, unionTax: {}, unionWinnings: {}, unionTips: {}, unionTipback: {},
     dayTotals: {}, reconChecks: [],
     filter: { mode: 'all', start: null, end: null }
   };
@@ -965,6 +979,22 @@ function renderIOUs(){
   container.innerHTML = html;
 }
 
+// ---- Union settlement math ----
+// Finest Union settles off their own weekly report, not straight rake:
+//   Deal T/R = -(Winnings + Tips) * 10%   (a tax when W+T is positive, a rebate when W+T is negative)
+//   Settlement = Winnings + Tipback + Deal T/R
+//   Total (after weekly fee) = Settlement - $30
+// This mirrors the "10% (W+T)" deal type shown on the union's settlement sheet.
+function unionCalcForWeek(wk){
+  const winnings = data.unionWinnings[wk] ?? 0;
+  const tips = data.unionTips[wk] ?? 0;
+  const tipback = data.unionTipback[wk] ?? 0;
+  const dealTR = -1 * UNION_DEAL_PCT * (winnings + tips);
+  const settlement = winnings + tipback + dealTR;
+  const total = settlement - UNION_WEEKLY_FEE;
+  return { winnings, tips, tipback, dealTR, settlement, total };
+}
+
 function renderUnion(){
   const byWeek = {};
   allDayDates().forEach(d=>{
@@ -973,6 +1003,8 @@ function renderUnion(){
   });
   const curWeek = currentWeekKey();
   if(!(curWeek in byWeek)) byWeek[curWeek] = 0;
+  // also surface any week where union numbers were entered even if no rake logged that week
+  Object.keys(data.unionWinnings).forEach(wk=>{ if(!(wk in byWeek)) byWeek[wk] = 0; });
 
   const weeks = Object.keys(byWeek).sort((a,b)=>b.localeCompare(a));
   const container = document.getElementById('unionWeeks');
@@ -984,8 +1016,7 @@ function renderUnion(){
   weeks.forEach(wk=>{
     const rake = byWeek[wk];
     const isCurrent = wk === curWeek;
-    const tax = data.unionTax[wk] ?? 0;
-    const net = rake - UNION_WEEKLY_FEE - tax;
+    const calc = unionCalcForWeek(wk);
     const received = data.unionReceived[wk];
     const card = document.createElement('div');
     card.className = 'week-card';
@@ -993,7 +1024,7 @@ function renderUnion(){
     if(received === undefined || received === null || received === ''){
       diffHtml = `<div class="week-diff pending">Awaiting union settlement entry</div>`;
     } else {
-      const diff = received - net;
+      const diff = received - calc.total;
       if(Math.abs(diff) < 0.01){
         diffHtml = `<div class="week-diff match">✓ Matches your numbers</div>`;
       } else {
@@ -1006,15 +1037,29 @@ function renderUnion(){
         <span class="week-label ${isCurrent?'week-current':''}">${isCurrent?'This week · ':''}${weekRangeLabel(wk)}</span>
         <span class="week-rake">${fmt(rake)}</span>
       </div>
-      <div class="week-row"><span>Rake generated</span><span>${fmt(rake)}</span></div>
-      <div class="week-row"><span>Union fee ($30/wk)</span><span>-${fmt(UNION_WEEKLY_FEE)}</span></div>
-      <div class="week-row">
-        <span>Tax/rebate (usually $0)</span>
-        <span><input type="number" step="0.01" value="${tax}" style="width:70px;background:var(--bg);border:1.5px solid var(--line);border-radius:3px;color:var(--text);padding:3px 6px;font-family:'DM Mono',monospace;font-size:11px;text-align:right;" onchange="setUnionTax('${wk}', this.value)"/></span>
+      <div class="week-row"><span>Rake logged (your tracking)</span><span>${fmt(rake)}</span></div>
+      <div class="week-inputs-title">From Union Settlement Report</div>
+      <div class="week-inputs-sub">Enter these once CJ/Pav send the weekly report. Winnings and Tips usually come in negative when the club lost to players.</div>
+      <div class="week-input-grid">
+        <div class="field">
+          <label>Winnings</label>
+          <input type="number" step="0.01" value="${calc.winnings || ''}" placeholder="0.00" onchange="setUnionField('${wk}','unionWinnings', this.value)"/>
+        </div>
+        <div class="field">
+          <label>Tips</label>
+          <input type="number" step="0.01" value="${calc.tips || ''}" placeholder="0.00" onchange="setUnionField('${wk}','unionTips', this.value)"/>
+        </div>
+        <div class="field">
+          <label>Tipback</label>
+          <input type="number" step="0.01" value="${calc.tipback || ''}" placeholder="0.00" onchange="setUnionField('${wk}','unionTipback', this.value)"/>
+        </div>
       </div>
-      <div class="week-row total"><span>Expected net (club, both partners)</span><span>${fmt(net)}</span></div>
+      <div class="week-row"><span>Deal T/R (10% of Winnings+Tips)</span><span>${fmtSigned(calc.dealTR)}</span></div>
+      <div class="week-row"><span>Settlement (Winnings+Tipback+T/R)</span><span>${fmtSigned(calc.settlement)}</span></div>
+      <div class="week-row"><span>Weekly fee</span><span>-${fmt(UNION_WEEKLY_FEE)}</span></div>
+      <div class="week-row total"><span>Expected total (club, both partners)</span><span>${fmtSigned(calc.total)}</span></div>
       <div class="week-field">
-        <label>What the union actually paid at settlement</label>
+        <label>What the union actually settled</label>
         <input type="number" step="0.01" placeholder="Enter after Sunday settlement" value="${received ?? ''}" onchange="setUnionReceived('${wk}', this.value)"/>
       </div>
       ${diffHtml}
@@ -1026,8 +1071,8 @@ function setUnionReceived(wk, val){
   data.unionReceived[wk] = val === '' ? null : parseFloat(val);
   save(); renderUnion();
 }
-function setUnionTax(wk, val){
-  data.unionTax[wk] = val === '' ? 0 : parseFloat(val);
+function setUnionField(wk, field, val){
+  data[field][wk] = val === '' ? 0 : parseFloat(val);
   save(); renderUnion();
 }
 
