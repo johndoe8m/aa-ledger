@@ -1037,14 +1037,18 @@ function renderUnion(){
         const dir = diff > 0 ? 'more' : 'less';
         diffHtml = `<div class="week-diff off">Off by ${fmt(Math.abs(diff))} (union paid ${dir} than expected)</div>`;
       }
-      // Settled and confirmed good (or at least entered) — show the final week profit,
-      // split 50/50, so there's one clean number once settlement is done.
-      const color = received >= 0 ? 'var(--accent)' : 'var(--red)';
-      const perPartner = Math.abs(received/2);
+      // Actual profit for the week = rake you collected (already yours) plus/minus
+      // whatever moved with the union on settlement (received is signed: positive
+      // means the union paid you, negative means you paid the union).
+      const weekProfit = rake + received;
+      const color = weekProfit >= 0 ? 'var(--accent)' : 'var(--red)';
+      const perPartner = weekProfit / 2;
       profitHtml = `<div class="week-profit">
-        <div class="week-profit-label">Week Profit — Settled</div>
-        <div class="week-profit-val" style="color:${color};">${fmtSigned(received)}</div>
-        <div class="week-profit-sub">${fmt(perPartner)} each${received<0?' (owed to union)':''}</div>
+        <div class="week-profit-label">Week Profit</div>
+        <div class="week-profit-val" style="color:${color};">${fmtSigned(weekProfit)}</div>
+        <div class="week-profit-sub">Rake ${fmt(rake)} ${received>=0?'+':'-'} settlement ${fmt(Math.abs(received))}</div>
+        <div class="week-row" style="border-top-color:var(--line);margin-top:8px;"><span>Brando</span><span style="color:${perPartner<0?'var(--red)':'var(--accent)'};">${fmtSigned(perPartner)}</span></div>
+        <div class="week-row" style="border-top:none;"><span>Matt</span><span style="color:${perPartner<0?'var(--red)':'var(--accent)'};">${fmtSigned(perPartner)}</span></div>
       </div>`;
     }
     card.innerHTML = `
