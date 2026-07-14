@@ -168,6 +168,10 @@
   .week-input-grid .field{margin:0;}
   .week-input-grid label{display:block;font-size:7px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;}
   .week-input-grid input{width:100%;background:var(--surface);border:1px solid var(--line);border-radius:5px;color:var(--text);padding:8px 8px;font-size:12px;font-family:'DM Mono',monospace;outline:none;}
+  .week-profit{margin-top:10px;background:var(--surface);border:1px solid var(--accent);border-radius:6px;padding:12px;text-align:center;}
+  .week-profit-label{font-size:8px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;}
+  .week-profit-val{font-family:'Bebas Neue',sans-serif;font-size:30px;letter-spacing:.5px;}
+  .week-profit-sub{font-size:10px;color:var(--muted);margin-top:3px;}
 
   .close-card{background:var(--surface2);border:1px solid var(--accent);border-radius:8px;padding:14px;margin-bottom:16px;}
   .close-title{font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--accent);margin-bottom:4px;letter-spacing:.5px;}
@@ -1018,10 +1022,12 @@ function renderUnion(){
     const isCurrent = wk === curWeek;
     const calc = unionCalcForWeek(wk);
     const received = data.unionReceived[wk];
+    const hasReceived = received !== undefined && received !== null && received !== '';
     const card = document.createElement('div');
     card.className = 'week-card';
     let diffHtml = '';
-    if(received === undefined || received === null || received === ''){
+    let profitHtml = '';
+    if(!hasReceived){
       diffHtml = `<div class="week-diff pending">Awaiting union settlement entry</div>`;
     } else {
       const diff = received - calc.total;
@@ -1031,6 +1037,15 @@ function renderUnion(){
         const dir = diff > 0 ? 'more' : 'less';
         diffHtml = `<div class="week-diff off">Off by ${fmt(Math.abs(diff))} (union paid ${dir} than expected)</div>`;
       }
+      // Settled and confirmed good (or at least entered) — show the final week profit,
+      // split 50/50, so there's one clean number once settlement is done.
+      const color = received >= 0 ? 'var(--accent)' : 'var(--red)';
+      const perPartner = Math.abs(received/2);
+      profitHtml = `<div class="week-profit">
+        <div class="week-profit-label">Week Profit — Settled</div>
+        <div class="week-profit-val" style="color:${color};">${fmtSigned(received)}</div>
+        <div class="week-profit-sub">${fmt(perPartner)} each${received<0?' (owed to union)':''}</div>
+      </div>`;
     }
     card.innerHTML = `
       <div class="week-head">
@@ -1063,6 +1078,7 @@ function renderUnion(){
         <input type="number" step="0.01" placeholder="Enter after Sunday settlement" value="${received ?? ''}" onchange="setUnionReceived('${wk}', this.value)"/>
       </div>
       ${diffHtml}
+      ${profitHtml}
     `;
     container.appendChild(card);
   });
