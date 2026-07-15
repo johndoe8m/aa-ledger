@@ -182,6 +182,11 @@
   .close-row{display:flex;justify-content:space-between;align-items:center;font-size:11px;padding:8px 0;border-top:1px solid var(--line);}
   .close-row .cr-date{color:var(--muted);}
   .close-row .cr-amt{color:var(--accent);font-weight:700;}
+  .close-card-header{display:flex;justify-content:space-between;align-items:center;cursor:pointer;}
+  .close-card-header .close-title{margin-bottom:0;}
+  .close-card-chevron{color:var(--accent);font-size:16px;line-height:1;transition:transform .2s;flex-shrink:0;margin-left:10px;}
+  .close-card-chevron.open{transform:rotate(180deg);}
+  .close-card-body{margin-top:12px;}
 
   .hidden{display:none!important;}
   .dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:6px;}
@@ -245,16 +250,21 @@
 
   <div class="tabs">
     <button class="tab active" onclick="switchTab('log',this)">Log</button>
+    <button class="tab" onclick="switchTab('tools',this)">Tools</button>
     <button class="tab" onclick="switchTab('union',this)">Union</button>
     <button class="tab" onclick="switchTab('stats',this)">Stats</button>
   </div>
 </div>
 
-<div class="content" id="tabLog">
+<div class="content hidden" id="tabTools">
 
   <!-- CHECK A DAY -->
   <div class="close-card">
-    <div class="close-title">Check a Day</div>
+    <div class="close-card-header" onclick="toggleCard(this)">
+      <div class="close-title">Check a Day</div>
+      <span class="close-card-chevron">⌄</span>
+    </div>
+    <div class="close-card-body hidden">
     <div class="close-sub">Pull the "1 Day" Total Fee from ClubGG's Club Data screen for a given date and drop it in here. It checks that against everything you've already logged for that date and tells you if you're over or under.</div>
     <div class="close-grid">
       <div class="field full">
@@ -272,11 +282,16 @@
     </div>
     <div id="checkResult"></div>
     <div class="close-history" id="checkHistory"></div>
+    </div>
   </div>
 
   <!-- FLOAT CHECK -->
   <div class="close-card">
-    <div class="close-title">Float Check</div>
+    <div class="close-card-header" onclick="toggleCard(this)">
+      <div class="close-title">Float Check</div>
+      <span class="close-card-chevron">⌄</span>
+    </div>
+    <div class="close-card-body hidden">
     <div class="close-sub">Enter what you're actually holding in real money right now, plus Total Member Chips from ClubGG's Counter screen. This tells you if you're covered or short — do it weekly and a gap gets caught small instead of building up. The buffer accounts for normal swings from players winning against other union clubs before settlement clears — it won't flag those as a problem.</div>
     <div class="close-grid">
       <div class="field">
@@ -303,11 +318,16 @@
     <button class="btn-save" onclick="checkFloat()">Check My Float</button>
     <div id="floatResult"></div>
     <div class="close-history" id="floatHistory"></div>
+    </div>
   </div>
 
   <!-- IOU TRACKER -->
   <div class="close-card">
-    <div class="close-title">IOUs</div>
+    <div class="close-card-header" onclick="toggleCard(this)">
+      <div class="close-title">IOUs</div>
+      <span class="close-card-chevron">⌄</span>
+    </div>
+    <div class="close-card-body hidden">
     <div class="close-sub">Money someone owes you (or you owe someone) that isn't in your accounts yet. Keeps it visible without it getting counted as real money until it actually lands — update your Float Check numbers once it's actually paid.</div>
     <div class="close-grid">
       <div class="field">
@@ -332,11 +352,16 @@
     </div>
     <button class="btn-save" onclick="addIOU()">Add IOU</button>
     <div class="close-history" id="iouList"></div>
+    </div>
   </div>
 
   <!-- SAVINGS GOAL -->
   <div class="close-card">
-    <div class="close-title">Savings Goal</div>
+    <div class="close-card-header" onclick="toggleCard(this)">
+      <div class="close-title">Savings Goal</div>
+      <span class="close-card-chevron">⌄</span>
+    </div>
+    <div class="close-card-body hidden">
     <div class="close-sub">Set a target and it stays locked until you hit it. Optionally peel off a % of your cut automatically every time new rake comes in, or drop money in by hand.</div>
     <div class="close-grid">
       <div class="field">
@@ -362,7 +387,12 @@
       <button class="btn-save" style="margin-bottom:0;" id="svWithdrawBtn" onclick="openSavingsWithdraw()">Withdraw</button>
     </div>
     <div class="close-history" id="savingsHistory"></div>
+    </div>
   </div>
+
+</div>
+
+<div class="content" id="tabLog">
 
   <button class="btn-primary" id="toggleBtn" onclick="toggleForm()">+ Log Individual Session</button>
 
@@ -1373,8 +1403,15 @@ function switchTab(name,el){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   el.classList.add('active');
   document.getElementById('tabLog').classList.toggle('hidden',name!=='log');
+  document.getElementById('tabTools').classList.toggle('hidden',name!=='tools');
   document.getElementById('tabUnion').classList.toggle('hidden',name!=='union');
   document.getElementById('tabStats').classList.toggle('hidden',name!=='stats');
+}
+function toggleCard(headerEl){
+  const body = headerEl.nextElementSibling;
+  const chevron = headerEl.querySelector('.close-card-chevron');
+  body.classList.toggle('hidden');
+  chevron.classList.toggle('open');
 }
 
 init();
