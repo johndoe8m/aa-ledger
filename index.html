@@ -334,6 +334,36 @@
     <div class="close-history" id="iouList"></div>
   </div>
 
+  <!-- SAVINGS GOAL -->
+  <div class="close-card">
+    <div class="close-title">Savings Goal</div>
+    <div class="close-sub">Set a target and it stays locked until you hit it. Optionally peel off a % of your cut automatically every time new rake comes in, or drop money in by hand.</div>
+    <div class="close-grid">
+      <div class="field">
+        <label>Goal Amount ($)</label>
+        <input type="number" id="svGoal" placeholder="500.00" step="0.01"/>
+      </div>
+      <div class="field">
+        <label>Auto % of My Cut</label>
+        <input type="number" id="svAutoPct" placeholder="0" min="0" max="100" step="1"/>
+      </div>
+    </div>
+    <button class="btn-save" onclick="saveSavingsSettings()">Save Settings</button>
+    <div style="margin-top:14px;">
+      <div class="bar-label-row">
+        <span class="bar-label" id="svBalanceLabel">$0 saved</span>
+        <span class="bar-val" id="svGoalLabel">of $0</span>
+      </div>
+      <div class="bar-bg"><div class="bar-fill" id="svBarFill" style="background:var(--accent);width:0%"></div></div>
+      <div id="svLockStatus" style="margin-top:8px;"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;">
+      <button class="btn-cancel" style="margin-bottom:0;" onclick="openSavingsAdd()">+ Add Manually</button>
+      <button class="btn-save" style="margin-bottom:0;" id="svWithdrawBtn" onclick="openSavingsWithdraw()">Withdraw</button>
+    </div>
+    <div class="close-history" id="savingsHistory"></div>
+  </div>
+
   <button class="btn-primary" id="toggleBtn" onclick="toggleForm()">+ Log Individual Session</button>
 
   <div class="form-card hidden" id="sessionForm">
@@ -429,20 +459,13 @@
 
 <div class="content hidden" id="tabStats">
   <div class="stat-card">
-    <div class="stat-card-title">Rake by Type</div>
+    <div class="stat-card-title">Savings Progress</div>
     <div class="bar-row">
       <div class="bar-label-row">
-        <span class="bar-label" style="color:var(--accent);"><span class="dot" style="background:var(--accent);"></span>Tournament</span>
-        <span class="bar-val" id="statTourney">$0</span>
+        <span class="bar-label" id="statSvLabel">$0 saved</span>
+        <span class="bar-val" id="statSvGoal">of $0</span>
       </div>
-      <div class="bar-bg"><div class="bar-fill" id="barTourney" style="background:var(--accent);width:0%"></div></div>
-    </div>
-    <div class="bar-row">
-      <div class="bar-label-row">
-        <span class="bar-label" style="color:var(--accent);"><span class="dot" style="background:var(--accent);"></span>Cash Game</span>
-        <span class="bar-val" id="statCash">$0</span>
-      </div>
-      <div class="bar-bg"><div class="bar-fill" id="barCash" style="background:var(--accent);width:0%"></div></div>
+      <div class="bar-bg"><div class="bar-fill" id="statSvBar" style="background:var(--accent);width:0%"></div></div>
     </div>
   </div>
   <div class="stat-grid">
@@ -453,6 +476,8 @@
     <div class="stat-cell"><div class="stat-cell-label">Brando Balance</div><div class="stat-cell-val" id="statBrandoBalance">$0</div></div>
     <div class="stat-cell"><div class="stat-cell-label">Matt Withdrawn</div><div class="stat-cell-val" id="statMattWithdrawn" style="color:var(--red);">$0</div></div>
     <div class="stat-cell"><div class="stat-cell-label">Matt Balance</div><div class="stat-cell-val" id="statMattBalance">$0</div></div>
+    <div class="stat-cell"><div class="stat-cell-label">Saved</div><div class="stat-cell-val" id="statSaved" style="color:var(--accent);">$0</div></div>
+    <div class="stat-cell"><div class="stat-cell-label">To Goal</div><div class="stat-cell-val" id="statToGoal">$0</div></div>
   </div>
 </div>
 
@@ -470,6 +495,24 @@
     <div class="modal-btns">
       <button class="modal-btn-cancel" onclick="closeWithdraw()">Cancel</button>
       <button class="modal-btn-confirm" onclick="confirmWithdraw()">Withdraw</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="savingsModal">
+  <div class="modal">
+    <div class="modal-title" id="savingsModalTitle">Add to Savings</div>
+    <div class="modal-field">
+      <label>Amount</label>
+      <input type="number" id="svAmount" placeholder="0.00"/>
+    </div>
+    <div class="modal-field">
+      <label>Note (optional)</label>
+      <input type="text" id="svNote" placeholder="e.g. tax season..."/>
+    </div>
+    <div class="modal-btns">
+      <button class="modal-btn-cancel" onclick="closeSavingsModal()">Cancel</button>
+      <button class="modal-btn-confirm" onclick="confirmSavingsAction()">Confirm</button>
     </div>
   </div>
 </div>
@@ -515,6 +558,11 @@ if(!data.ious) data.ious = [];
 if(!data.filter) data.filter = { mode: 'all', start: null, end: null };
 // old field, kept only so older exports don't error on load; no longer used
 if(!data.reconChecks) data.reconChecks = [];
+if(!data.savings) data.savings = { goal: 0, autoPercent: 0, lastGrossSynced: undefined, contributions: [], withdrawals: [] };
+if(!data.savings.contributions) data.savings.contributions = [];
+if(!data.savings.withdrawals) data.savings.withdrawals = [];
+if(data.savings.goal === undefined) data.savings.goal = 0;
+if(data.savings.autoPercent === undefined) data.savings.autoPercent = 0;
 
 function save(){
   storageSet('aaLedger', JSON.stringify(data));
@@ -671,17 +719,40 @@ function init(){
   render();
 }
 
+function savingsBalanceNow(){
+  const c = data.savings.contributions.reduce((a,x)=>a+x.amount,0);
+  const w = data.savings.withdrawals.reduce((a,x)=>a+x.amount,0);
+  return c - w;
+}
+function syncAutoSavings(){
+  const s = data.savings;
+  const gross = totalRakeAll()/2;
+  if(s.lastGrossSynced === undefined || s.lastGrossSynced === null){
+    s.lastGrossSynced = gross;
+    save();
+    return;
+  }
+  const delta = gross - s.lastGrossSynced;
+  if(delta > 0.001 && s.autoPercent > 0){
+    const contrib = delta * (s.autoPercent/100);
+    s.contributions.push({id:Date.now()+Math.random(), date:today(), amount:contrib, note:'Auto '+s.autoPercent+'%', auto:true});
+  }
+  if(delta > 0.001){ s.lastGrossSynced = gross; save(); }
+}
+
 function render(){
+  syncAutoSavings();
   const withdrawals = data.withdrawals;
   const mattWithdrawals = data.mattWithdrawals;
   const totalRake = totalRakeAll();
   const totalWithdrawn = withdrawals.reduce((a,w)=>a+w.amount,0);
   const mattTotalWithdrawn = mattWithdrawals.reduce((a,w)=>a+w.amount,0);
+  const totalSavingsContrib = data.savings.contributions.reduce((a,c)=>a+c.amount,0);
   const brandoGross = totalRake/2;
-  const brandoNet = brandoGross - totalWithdrawn;
+  const brandoNet = brandoGross - totalWithdrawn - totalSavingsContrib;
   const mattGross = totalRake/2;
   const mattNet = mattGross - mattTotalWithdrawn;
-  const totalSpent = totalWithdrawn + mattTotalWithdrawn;
+  const totalSpent = totalWithdrawn + mattTotalWithdrawn + totalSavingsContrib;
   const inBank = totalRake - totalSpent;
 
   document.getElementById('totalRake').textContent = fmt(totalRake);
@@ -693,7 +764,10 @@ function render(){
   else { bankEl.style.color = 'var(--accent)'; bankDot.style.background = 'var(--accent)'; }
 
   document.getElementById('brandoGross').textContent = fmt(brandoGross)+' gross';
-  document.getElementById('brandoWithdrawn').textContent = totalWithdrawn>0 ? '- '+fmt(totalWithdrawn)+' withdrawn' : '';
+  const brandoWithdrawnParts = [];
+  if(totalWithdrawn>0) brandoWithdrawnParts.push('-'+fmt(totalWithdrawn)+' withdrawn');
+  if(totalSavingsContrib>0) brandoWithdrawnParts.push('-'+fmt(totalSavingsContrib)+' saved');
+  document.getElementById('brandoWithdrawn').textContent = brandoWithdrawnParts.join(' · ');
   document.getElementById('brandoNet').textContent = fmtAcct(brandoNet);
   document.getElementById('brandoNet').style.color = brandoNet<0 ? 'var(--red)' : 'var(--accent)';
   document.getElementById('mattGross').textContent = fmt(mattGross)+' gross';
@@ -717,14 +791,6 @@ function render(){
   document.getElementById('filterActiveLabel').textContent = filterLabelText();
 
   const allDates = allDayDates();
-  const closedTourney = Object.values(data.dayTotals).reduce((a,d)=>a+(d.tournament||0),0);
-  const closedCash = Object.values(data.dayTotals).reduce((a,d)=>a+(d.cash||0),0);
-  const tRake = data.sessions.filter(s=>s.type==='tournament').reduce((a,s)=>a+s.rake,0) + closedTourney;
-  const cRake = data.sessions.filter(s=>s.type==='cash').reduce((a,s)=>a+s.rake,0) + closedCash;
-  document.getElementById('statTourney').textContent = fmt(tRake);
-  document.getElementById('statCash').textContent = fmt(cRake);
-  document.getElementById('barTourney').style.width = totalRake>0 ? (tRake/totalRake*100)+'%' : '0%';
-  document.getElementById('barCash').style.width = totalRake>0 ? (cRake/totalRake*100)+'%' : '0%';
   document.getElementById('statDays').textContent = allDates.length;
   document.getElementById('statSessions').textContent = data.sessions.length;
   document.getElementById('statMonthly').textContent = fmtShort(totalRake/(allDates.length||1)*30);
@@ -732,6 +798,14 @@ function render(){
   document.getElementById('statBrandoBalance').textContent = fmtAcct(brandoNet);
   document.getElementById('statMattWithdrawn').textContent = fmt(mattTotalWithdrawn);
   document.getElementById('statMattBalance').textContent = fmtAcct(mattNet);
+  const savingsBalance = savingsBalanceNow();
+  const svGoal = data.savings.goal || 0;
+  const svPct = svGoal>0 ? Math.min(100, (savingsBalance/svGoal)*100) : 0;
+  document.getElementById('statSvLabel').textContent = fmt(savingsBalance)+' saved';
+  document.getElementById('statSvGoal').textContent = svGoal>0 ? 'of '+fmt(svGoal) : 'no goal set';
+  document.getElementById('statSvBar').style.width = svPct+'%';
+  document.getElementById('statSaved').textContent = fmt(savingsBalance);
+  document.getElementById('statToGoal').textContent = svGoal>0 ? fmt(Math.max(0, svGoal-savingsBalance)) : '—';
 
   const log = document.getElementById('sessionLog');
   log.innerHTML='';
@@ -827,6 +901,7 @@ function render(){
   renderFloatHistory();
   renderIOUs();
   renderUnion();
+  renderSavings();
 }
 
 // ---- Check a Day ----
@@ -979,6 +1054,94 @@ function renderIOUs(){
         <button class="session-reopen" onclick="markIOUPaid(${i.id})">Paid</button>
       </span>
     </div>`;
+  });
+  container.innerHTML = html;
+}
+
+// ---- Savings Goal ----
+let currentSavingsAction = 'add';
+function saveSavingsSettings(){
+  const goal = parseFloat(document.getElementById('svGoal').value) || 0;
+  const pct = parseFloat(document.getElementById('svAutoPct').value) || 0;
+  data.savings.goal = Math.max(0, goal);
+  data.savings.autoPercent = Math.max(0, Math.min(100, pct));
+  save(); render();
+}
+function openSavingsAdd(){
+  currentSavingsAction = 'add';
+  document.getElementById('savingsModalTitle').textContent = 'Add to Savings';
+  document.getElementById('savingsModal').classList.remove('hidden');
+}
+function openSavingsWithdraw(){
+  const s = data.savings;
+  const balance = savingsBalanceNow();
+  if(s.goal<=0 || balance < s.goal){
+    alert('Savings is locked until you hit your goal of '+fmt(s.goal)+'. Currently at '+fmt(balance)+'.');
+    return;
+  }
+  currentSavingsAction = 'withdraw';
+  document.getElementById('savingsModalTitle').textContent = 'Withdraw from Savings';
+  document.getElementById('savingsModal').classList.remove('hidden');
+}
+function closeSavingsModal(){
+  document.getElementById('savingsModal').classList.add('hidden');
+  document.getElementById('svAmount').value='';
+  document.getElementById('svNote').value='';
+}
+function confirmSavingsAction(){
+  const amount = parseFloat(document.getElementById('svAmount').value);
+  if(!amount||amount<=0) return;
+  const note = document.getElementById('svNote').value;
+  if(currentSavingsAction==='add'){
+    data.savings.contributions.push({id:Date.now(), date:today(), amount, note, auto:false});
+  } else {
+    const balance = savingsBalanceNow();
+    if(amount > balance){ alert('Only '+fmt(balance)+' available in savings.'); return; }
+    data.savings.withdrawals.push({id:Date.now(), date:today(), amount, note});
+  }
+  save(); closeSavingsModal(); render();
+}
+function deleteSavingsEntry(kind, id){
+  if(!confirm('Delete this entry?')) return;
+  if(kind==='contrib') data.savings.contributions = data.savings.contributions.filter(c=>c.id!==id);
+  else data.savings.withdrawals = data.savings.withdrawals.filter(w=>w.id!==id);
+  save(); render();
+}
+function renderSavings(){
+  const s = data.savings;
+  document.getElementById('svGoal').value = s.goal || '';
+  document.getElementById('svAutoPct').value = s.autoPercent || '';
+  const balance = savingsBalanceNow();
+  const goal = s.goal || 0;
+  const pct = goal>0 ? Math.min(100, (balance/goal)*100) : 0;
+  document.getElementById('svBalanceLabel').textContent = fmt(balance)+' saved';
+  document.getElementById('svGoalLabel').textContent = goal>0 ? 'of '+fmt(goal) : 'set a goal above';
+  document.getElementById('svBarFill').style.width = pct+'%';
+  const lockEl = document.getElementById('svLockStatus');
+  const withdrawBtn = document.getElementById('svWithdrawBtn');
+  if(goal<=0){
+    lockEl.innerHTML = '<div class="week-diff pending">Set a goal to start locking savings.</div>';
+    withdrawBtn.style.opacity = '0.5';
+  } else if(balance >= goal){
+    lockEl.innerHTML = '<div class="week-diff match">🔓 Goal hit! Savings unlocked.</div>';
+    withdrawBtn.style.opacity = '1';
+  } else {
+    lockEl.innerHTML = '<div class="week-diff pending">🔒 Locked — '+fmt(goal-balance)+' to go.</div>';
+    withdrawBtn.style.opacity = '0.5';
+  }
+
+  const container = document.getElementById('savingsHistory');
+  const entries = [
+    ...s.contributions.map(c=>({...c, kind:'contrib'})),
+    ...s.withdrawals.map(w=>({...w, kind:'withdraw'}))
+  ].sort((a,b)=>b.id-a.id).slice(0,10);
+  if(entries.length===0){ container.innerHTML=''; return; }
+  let html = '';
+  entries.forEach(e=>{
+    const label = e.kind==='contrib' ? (e.auto?'Auto save':'Added') : 'Withdrew';
+    const color = e.kind==='contrib' ? 'var(--accent)' : 'var(--red)';
+    const sign = e.kind==='contrib' ? '+' : '-';
+    html += `<div class="close-row"><span class="cr-date">${label}${e.note?' — '+e.note:''}</span><span style="display:flex;align-items:center;gap:8px;"><span class="cr-amt" style="color:${color};">${sign}${fmt(e.amount)}</span><button class="session-del" onclick="deleteSavingsEntry('${e.kind}',${e.id})">x</button></span></div>`;
   });
   container.innerHTML = html;
 }
