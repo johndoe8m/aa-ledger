@@ -85,6 +85,7 @@
   .btn-cancel{width:100%;background:none;border:1px solid var(--red);color:var(--red);border-radius:6px;padding:13px;font-size:11px;letter-spacing:3px;text-transform:uppercase;cursor:pointer;font-family:'DM Mono',monospace;margin-bottom:14px;}
   .btn-save{width:100%;background:var(--accent);border:none;color:#04140A;border-radius:6px;padding:12px;font-size:11px;font-weight:700;letter-spacing:3px;cursor:pointer;font-family:'DM Mono',monospace;}
   .btn-withdraw{background:none;border:1px solid var(--red);color:var(--red);border-radius:5px;padding:5px 10px;font-size:9px;letter-spacing:2px;cursor:pointer;font-family:'DM Mono',monospace;}
+  .btn-backup{width:100%;background:var(--surface2);border:1px solid var(--accent);color:var(--accent);border-radius:6px;padding:11px;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;cursor:pointer;font-family:'DM Mono',monospace;}
 
   .form-card{background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:16px;}
   .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;}
@@ -200,6 +201,7 @@
   .filter-custom span{font-size:10px;color:var(--muted);}
   .filter-custom button{background:var(--accent);border:none;color:#04140A;border-radius:5px;padding:8px 12px;font-size:10px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;font-family:'DM Mono',monospace;}
   .filter-label{font-size:10px;color:var(--muted);margin-top:9px;letter-spacing:0.5px;}
+  .backup-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
 </style>
 </head>
 <body>
@@ -257,6 +259,23 @@
 </div>
 
 <div class="content hidden" id="tabTools">
+
+  <!-- BACKUP / RESTORE -->
+  <div class="close-card">
+    <div class="close-card-header" onclick="toggleCard(this)">
+      <div class="close-title">Backup &amp; Restore</div>
+      <span class="close-card-chevron">⌄</span>
+    </div>
+    <div class="close-card-body hidden">
+    <div class="close-sub">Getting a new phone? Tap Export here first on your old phone/browser to download a backup file, then open this page on the new phone and tap Import to load everything back in. Your data lives only in this browser, so it won't carry over on its own.</div>
+    <div class="backup-row">
+      <button class="btn-backup" onclick="exportData()">⬇ Export Data</button>
+      <button class="btn-backup" onclick="document.getElementById('importFile').click()">⬆ Import Data</button>
+    </div>
+    <input type="file" id="importFile" accept="application/json" class="hidden" onchange="importData(event)"/>
+    <div id="backupStatus"></div>
+    </div>
+  </div>
 
   <!-- CHECK A DAY -->
   <div class="close-card">
@@ -619,6 +638,69 @@ function today(){
 function nowTime(){
   const d = new Date();
   return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+// ---- Backup / Restore ----
+function exportData(){
+  try{
+    const payload = JSON.stringify(data, null, 2);
+    const blob = new Blob([payload], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'aa-ledger-backup-'+today()+'.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    const statusEl = document.getElementById('backupStatus');
+    statusEl.innerHTML = '<div class="week-diff match">✓ Backup downloaded. Save it somewhere (Files app, email to yourself, cloud drive) so you can grab it from your new phone.</div>';
+  }catch(e){
+    document.getElementById('backupStatus').innerHTML = '<div class="week-diff off">Export failed: '+e.message+'</div>';
+  }
+}
+function importData(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    let parsed;
+    try{
+      parsed = JSON.parse(e.target.result);
+    }catch(err){
+      document.getElementById('backupStatus').innerHTML = '<div class="week-diff off">That file isn\'t a valid backup — couldn\'t read it.</div>';
+      event.target.value = '';
+      return;
+    }
+    if(!parsed || !Array.isArray(parsed.sessions)){
+      document.getElementById('backupStatus').innerHTML = '<div class="week-diff off">That doesn\'t look like an AA Ledger backup file.</div>';
+      event.target.value = '';
+      return;
+    }
+    const ok = confirm('This will replace everything currently in the app with the data from this backup file. Continue?');
+    if(!ok){ event.target.value = ''; return; }
+    data = parsed;
+    if(!data.mattWithdrawals) data.mattWithdrawals = [];
+    if(!data.unionReceived) data.unionReceived = {};
+    if(!data.unionWinnings) data.unionWinnings = {};
+    if(!data.unionTips) data.unionTips = {};
+    if(!data.unionTipback) data.unionTipback = {};
+    if(!data.dayTotals) data.dayTotals = {};
+    if(!data.checks) data.checks = {};
+    if(!data.floatChecks) data.floatChecks = [];
+    if(data.floatBuffer === undefined) data.floatBuffer = 0;
+    if(!data.ious) data.ious = [];
+    if(!data.filter) data.filter = { mode: 'all', start: null, end: null };
+    if(!data.savings) data.savings = { goal: 0, autoPercent: 0, lastGrossSynced: undefined, contributions: [], withdrawals: [] };
+    if(!data.savings.contributions) data.savings.contributions = [];
+    if(!data.savings.withdrawals) data.savings.withdrawals = [];
+    save();
+    document.getElementById('backupStatus').innerHTML = '<div class="week-diff match">✓ Backup restored — your data is loaded back in.</div>';
+    highlightChip(data.filter.mode);
+    event.target.value = '';
+    render();
+  };
+  reader.readAsText(file);
 }
 
 // ---- Day totals: rake for a date is either a closed day-total (now split
