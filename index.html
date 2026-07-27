@@ -74,6 +74,7 @@
   .split-gross{font-size:15px;font-weight:500;color:var(--text);}
   .split-withdrawn{font-size:10px;color:var(--red);margin-top:1px;}
   .split-net{font-family:'Bebas Neue',sans-serif;font-size:24px;color:var(--accent);margin-top:2px;letter-spacing:.5px;}
+  .split-breakdown{font-size:9px;color:var(--muted);margin-top:2px;}
 
   .tabs{display:flex;border-bottom:1px solid var(--line);}
   .tab{flex:1;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);padding:9px 4px;font-size:9px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;font-family:'DM Mono',monospace;font-weight:500;transition:all .15s;margin-bottom:-1px;}
@@ -239,6 +240,7 @@
       <div class="split-gross" id="brandoGross">$0.00 gross</div>
       <div class="split-withdrawn" id="brandoWithdrawn"></div>
       <div class="split-net" id="brandoNet">$0.00</div>
+      <div class="split-breakdown" id="brandoBreakdown"></div>
       <button class="btn-withdraw" style="margin-top:8px;" onclick="openWithdraw('brando')">- Withdraw</button>
     </div>
     <div class="split-card">
@@ -522,7 +524,7 @@
     <div class="stat-cell"><div class="stat-cell-label">Sessions Logged</div><div class="stat-cell-val" id="statSessions">0</div></div>
     <div class="stat-cell"><div class="stat-cell-label">Proj. Monthly</div><div class="stat-cell-val" id="statMonthly">$0</div></div>
     <div class="stat-cell"><div class="stat-cell-label">Brando Withdrawn</div><div class="stat-cell-val" id="statWithdrawn" style="color:var(--red);">$0</div></div>
-    <div class="stat-cell"><div class="stat-cell-label">Brando Balance</div><div class="stat-cell-val" id="statBrandoBalance">$0</div></div>
+    <div class="stat-cell"><div class="stat-cell-label">Brando Total (+Saved)</div><div class="stat-cell-val" id="statBrandoBalance">$0</div></div>
     <div class="stat-cell"><div class="stat-cell-label">Matt Withdrawn</div><div class="stat-cell-val" id="statMattWithdrawn" style="color:var(--red);">$0</div></div>
     <div class="stat-cell"><div class="stat-cell-label">Matt Balance</div><div class="stat-cell-val" id="statMattBalance">$0</div></div>
     <div class="stat-cell"><div class="stat-cell-label">Saved</div><div class="stat-cell-val" id="statSaved" style="color:var(--accent);">$0</div></div>
@@ -860,11 +862,20 @@ function render(){
   const totalWithdrawn = withdrawals.reduce((a,w)=>a+w.amount,0);
   const mattTotalWithdrawn = mattWithdrawals.reduce((a,w)=>a+w.amount,0);
   const totalSavingsContrib = data.savings.contributions.reduce((a,c)=>a+c.amount,0);
+  const totalSavingsWithdrawn = data.savings.withdrawals.reduce((a,w)=>a+w.amount,0);
+  const netSavings = totalSavingsContrib - totalSavingsWithdrawn;
   const brandoGross = totalRake/2;
-  const brandoNet = brandoGross - totalWithdrawn - totalSavingsContrib;
+  // brandoTotal = everything still Brando's that hasn't left the club as real
+  // cash (i.e. gross minus true withdrawals). Savings is still his money —
+  // just earmarked — so it stays inside this total instead of being
+  // subtracted out a second time.
+  const brandoTotal = brandoGross - totalWithdrawn;
+  // brandoAvailable = the liquid slice of that total: what's left after
+  // carving out whatever is currently sitting in savings.
+  const brandoAvailable = brandoTotal - netSavings;
   const mattGross = totalRake/2;
   const mattNet = mattGross - mattTotalWithdrawn;
-  const totalSpent = totalWithdrawn + mattTotalWithdrawn + totalSavingsContrib;
+  const totalSpent = totalWithdrawn + mattTotalWithdrawn + netSavings;
   const inBank = totalRake - totalSpent;
 
   document.getElementById('totalRake').textContent = fmt(totalRake);
@@ -878,10 +889,12 @@ function render(){
   document.getElementById('brandoGross').textContent = fmt(brandoGross)+' gross';
   const brandoWithdrawnParts = [];
   if(totalWithdrawn>0) brandoWithdrawnParts.push('-'+fmt(totalWithdrawn)+' withdrawn');
-  if(totalSavingsContrib>0) brandoWithdrawnParts.push('-'+fmt(totalSavingsContrib)+' saved');
   document.getElementById('brandoWithdrawn').textContent = brandoWithdrawnParts.join(' · ');
-  document.getElementById('brandoNet').textContent = fmtAcct(brandoNet);
-  document.getElementById('brandoNet').style.color = brandoNet<0 ? 'var(--red)' : 'var(--accent)';
+  document.getElementById('brandoNet').textContent = fmtAcct(brandoTotal);
+  document.getElementById('brandoNet').style.color = brandoTotal<0 ? 'var(--red)' : 'var(--accent)';
+  const brandoBreakdownParts = ['Available '+fmt(brandoAvailable)];
+  if(netSavings > 0.004) brandoBreakdownParts.push('Saved '+fmt(netSavings));
+  document.getElementById('brandoBreakdown').textContent = brandoBreakdownParts.join(' · ');
   document.getElementById('mattGross').textContent = fmt(mattGross)+' gross';
   document.getElementById('mattWithdrawn').textContent = mattTotalWithdrawn>0 ? '- '+fmt(mattTotalWithdrawn)+' withdrawn' : '';
   document.getElementById('mattNet').textContent = fmtAcct(mattNet);
@@ -907,7 +920,7 @@ function render(){
   document.getElementById('statSessions').textContent = data.sessions.length;
   document.getElementById('statMonthly').textContent = fmtShort(totalRake/(allDates.length||1)*30);
   document.getElementById('statWithdrawn').textContent = fmt(totalWithdrawn);
-  document.getElementById('statBrandoBalance').textContent = fmtAcct(brandoNet);
+  document.getElementById('statBrandoBalance').textContent = fmtAcct(brandoTotal);
   document.getElementById('statMattWithdrawn').textContent = fmt(mattTotalWithdrawn);
   document.getElementById('statMattBalance').textContent = fmtAcct(mattNet);
   const savingsBalance = savingsBalanceNow();
