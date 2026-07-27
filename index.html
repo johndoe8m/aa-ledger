@@ -870,6 +870,10 @@ function render(){
   // just earmarked — so it stays inside this total instead of being
   // subtracted out a second time.
   const brandoTotal = brandoGross - totalWithdrawn;
+  // brandoAvailable = brandoTotal with his slice of savings carved back out,
+  // so the big number is just what's actually spendable, and Saved shows
+  // as its own separate figure underneath.
+  const brandoAvailable = brandoTotal - netSavings;
   const mattGross = totalRake/2;
   const mattNet = mattGross - mattTotalWithdrawn;
   // "In Bank" = the full combined rake amount, minus only real withdrawals
@@ -890,8 +894,8 @@ function render(){
   const brandoWithdrawnParts = [];
   if(totalWithdrawn>0) brandoWithdrawnParts.push('-'+fmt(totalWithdrawn)+' withdrawn');
   document.getElementById('brandoWithdrawn').textContent = brandoWithdrawnParts.join(' · ');
-  document.getElementById('brandoNet').textContent = fmtAcct(brandoTotal);
-  document.getElementById('brandoNet').style.color = brandoTotal<0 ? 'var(--red)' : 'var(--accent)';
+  document.getElementById('brandoNet').textContent = fmtAcct(brandoAvailable);
+  document.getElementById('brandoNet').style.color = brandoAvailable<0 ? 'var(--red)' : 'var(--accent)';
   document.getElementById('brandoBreakdown').textContent = netSavings > 0.004 ? 'Saved '+fmt(netSavings) : '';
   document.getElementById('mattGross').textContent = fmt(mattGross)+' gross';
   document.getElementById('mattWithdrawn').textContent = mattTotalWithdrawn>0 ? '- '+fmt(mattTotalWithdrawn)+' withdrawn' : '';
