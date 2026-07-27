@@ -870,12 +870,12 @@ function render(){
   // just earmarked — so it stays inside this total instead of being
   // subtracted out a second time.
   const brandoTotal = brandoGross - totalWithdrawn;
-  // brandoAvailable = the liquid slice of that total: what's left after
-  // carving out whatever is currently sitting in savings.
-  const brandoAvailable = brandoTotal - netSavings;
   const mattGross = totalRake/2;
   const mattNet = mattGross - mattTotalWithdrawn;
-  const totalSpent = totalWithdrawn + mattTotalWithdrawn + netSavings;
+  // "In Bank" = the full combined rake amount, minus only real withdrawals
+  // that actually left the club (savings is still sitting in the club, just
+  // earmarked, so it's not subtracted here).
+  const totalSpent = totalWithdrawn + mattTotalWithdrawn;
   const inBank = totalRake - totalSpent;
 
   document.getElementById('totalRake').textContent = fmt(totalRake);
@@ -892,9 +892,7 @@ function render(){
   document.getElementById('brandoWithdrawn').textContent = brandoWithdrawnParts.join(' · ');
   document.getElementById('brandoNet').textContent = fmtAcct(brandoTotal);
   document.getElementById('brandoNet').style.color = brandoTotal<0 ? 'var(--red)' : 'var(--accent)';
-  const brandoBreakdownParts = ['Available '+fmt(brandoAvailable)];
-  if(netSavings > 0.004) brandoBreakdownParts.push('Saved '+fmt(netSavings));
-  document.getElementById('brandoBreakdown').textContent = brandoBreakdownParts.join(' · ');
+  document.getElementById('brandoBreakdown').textContent = netSavings > 0.004 ? 'Saved '+fmt(netSavings) : '';
   document.getElementById('mattGross').textContent = fmt(mattGross)+' gross';
   document.getElementById('mattWithdrawn').textContent = mattTotalWithdrawn>0 ? '- '+fmt(mattTotalWithdrawn)+' withdrawn' : '';
   document.getElementById('mattNet').textContent = fmtAcct(mattNet);
