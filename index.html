@@ -1491,6 +1491,33 @@ function closeWithdraw(){
 function confirmWithdraw(){
   const amount = parseFloat(document.getElementById('wAmount').value);
   if(!amount||amount<=0) return;
+
+  // Guard rail: don't let a regular withdrawal reach into money that's
+  // earmarked in Savings. Savings has its own lock screen, but this button
+  // was never checking against it, so a withdrawal here could quietly eat
+  // into the "locked" balance without tripping the Savings lock at all.
+  if(currentWithdrawTarget === 'brando'){
+    const totalRake = totalRakeAll();
+    const totalWithdrawn = data.withdrawals.reduce((a,w)=>a+w.amount,0);
+    const brandoGross = totalRake/2;
+    const brandoTotal = brandoGross - totalWithdrawn;
+    const netSavings = savingsBalanceNow();
+    const brandoAvailable = brandoTotal - netSavings;
+    if(amount > brandoAvailable + 0.004){
+      alert('Only '+fmt(Math.max(0,brandoAvailable))+' is available to withdraw — '+fmt(netSavings)+' is locked in Savings.');
+      return;
+    }
+  } else {
+    const totalRake = totalRakeAll();
+    const mattTotalWithdrawn = data.mattWithdrawals.reduce((a,w)=>a+w.amount,0);
+    const mattGross = totalRake/2;
+    const mattAvailable = mattGross - mattTotalWithdrawn;
+    if(amount > mattAvailable + 0.004){
+      alert('Only '+fmt(Math.max(0,mattAvailable))+' is available to withdraw.');
+      return;
+    }
+  }
+
   const entry = {id:Date.now(),date:today(),amount,note:document.getElementById('wNote').value};
   if(currentWithdrawTarget==='matt'){ data.mattWithdrawals.push(entry); }
   else { data.withdrawals.push(entry); }
