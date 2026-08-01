@@ -383,7 +383,7 @@
       <span class="close-card-chevron">⌄</span>
     </div>
     <div class="close-card-body hidden">
-    <div class="close-sub">Set a target and it stays locked until you hit it. Optionally peel off a % of your cut automatically every time new rake comes in, or drop money in by hand.</div>
+    <div class="close-sub">Set a target to track progress toward it — savings are withdrawable anytime, no lock. Optionally peel off a % of your cut automatically every time new rake comes in, or drop money in by hand.</div>
     <div class="close-grid">
       <div class="field">
         <label>Goal Amount ($)</label>
@@ -1200,10 +1200,9 @@ function openSavingsAdd(){
   document.getElementById('savingsModal').classList.remove('hidden');
 }
 function openSavingsWithdraw(){
-  const s = data.savings;
   const balance = savingsBalanceNow();
-  if(s.goal<=0 || balance < s.goal){
-    alert('Savings is locked until you hit your goal of '+fmt(s.goal)+'. Currently at '+fmt(balance)+'.');
+  if(balance <= 0){
+    alert('Nothing in savings yet to withdraw.');
     return;
   }
   currentSavingsAction = 'withdraw';
@@ -1246,15 +1245,13 @@ function renderSavings(){
   document.getElementById('svBarFill').style.width = pct+'%';
   const lockEl = document.getElementById('svLockStatus');
   const withdrawBtn = document.getElementById('svWithdrawBtn');
+  withdrawBtn.style.opacity = '1';
   if(goal<=0){
-    lockEl.innerHTML = '<div class="week-diff pending">Set a goal to start locking savings.</div>';
-    withdrawBtn.style.opacity = '0.5';
+    lockEl.innerHTML = '<div class="week-diff pending">Set a goal to track progress.</div>';
   } else if(balance >= goal){
-    lockEl.innerHTML = '<div class="week-diff match">🔓 Goal hit! Savings unlocked.</div>';
-    withdrawBtn.style.opacity = '1';
+    lockEl.innerHTML = '<div class="week-diff match">🎉 Goal reached!</div>';
   } else {
-    lockEl.innerHTML = '<div class="week-diff pending">🔒 Locked — '+fmt(goal-balance)+' to go.</div>';
-    withdrawBtn.style.opacity = '0.5';
+    lockEl.innerHTML = '<div class="week-diff pending">'+fmt(goal-balance)+' to go.</div>';
   }
 
   const container = document.getElementById('savingsHistory');
