@@ -572,6 +572,18 @@
 const RAKE_PER_BUYIN = 2;
 const UNION_WEEKLY_FEE = 30;
 const UNION_DEAL_PCT = 0.10; // Deal T/R %: 10% of (Winnings + Tips), sign-flipped as rebate/tax
+const BRANDO_SPLIT_PCT = 0.60; // Brando/Matt rake split (changed from 50/50 to 60/40)
+const MATT_SPLIT_PCT = 0.40;
+// Everything logged before this date keeps splitting 50/50, exactly as it
+// always did. Only rake/union settlements dated on or after this take the
+// new 60/40 split. Change this if you and Matt agreed on a different start
+// date for the new deal.
+const SPLIT_CUTOVER_DATE = '2026-08-10';
+function partnerSplitForDate(date){
+  return date < SPLIT_CUTOVER_DATE
+    ? { brando: 0.5, matt: 0.5 }
+    : { brando: BRANDO_SPLIT_PCT, matt: MATT_SPLIT_PCT };
+}
 let currentWithdrawTarget = 'brando';
 
 let storageAvailable = true;
@@ -723,6 +735,36 @@ function allDayDates(){
 function totalRakeAll(){
   return allDayDates().reduce((a,d)=>a+rakeForDate(d),0);
 }
+// Sum of actual union settlements entered so far (signed: positive = union
+// paid the club, negative = club paid the union). Only counts weeks where
+// a real settlement number has been entered — future/unsettled weeks
+// contribute $0 until you fill that in.
+function totalUnionSettledAmount(){
+  return Object.values(data.unionReceived).reduce((a,v)=> a + (v===null||v===undefined?0:v), 0);
+}
+// Splits the union settlement by whichever deal was in effect for that
+// week (using the week's Sunday settlement date against the cutover).
+function unionSettledSplit(){
+  let brando=0, matt=0;
+  Object.keys(data.unionReceived).forEach(wk=>{
+    const v = data.unionReceived[wk];
+    if(v===null||v===undefined) return;
+    const pct = partnerSplitForDate(wk);
+    brando += v*pct.brando;
+    matt += v*pct.matt;
+  });
+  return {brando, matt};
+}
+// The real gross for each partner: every day's rake split by whatever deal
+// was in effect that day, plus each week's union settlement split by
+// whatever deal was in effect that week. This is what makes old logs stay
+// 50/50 while new ones use 60/40.
+function computeGrossSplits(){
+  const rakeBrando = allDayDates().reduce((a,d)=> a + rakeForDate(d)*partnerSplitForDate(d).brando, 0);
+  const rakeMatt = allDayDates().reduce((a,d)=> a + rakeForDate(d)*partnerSplitForDate(d).matt, 0);
+  const us = unionSettledSplit();
+  return { brandoGross: rakeBrando + us.brando, mattGross: rakeMatt + us.matt };
+}
 function setDayTotal(date, tournament, cash){
   data.dayTotals[date] = { tournament, cash, closedAt: Date.now() };
   save();
@@ -840,7 +882,7 @@ function savingsBalanceNow(){
 }
 function syncAutoSavings(){
   const s = data.savings;
-  const gross = totalRakeAll()/2;
+  const gross = computeGrossSplits().brandoGross;
   if(s.lastGrossSynced === undefined || s.lastGrossSynced === null){
     s.lastGrossSynced = gross;
     save();
@@ -864,7 +906,13 @@ function render(){
   const totalSavingsContrib = data.savings.contributions.reduce((a,c)=>a+c.amount,0);
   const totalSavingsWithdrawn = data.savings.withdrawals.reduce((a,w)=>a+w.amount,0);
   const netSavings = totalSavingsContrib - totalSavingsWithdrawn;
-  const brandoGross = totalRake/2;
+  // sharedPool = rake collected plus/minus whatever's actually settled with
+  // the union so far. Splitting off of this (not raw rake) means union
+  // swings — the tax/rebate and $30 fee — get shared 60/40 same as
+  // everything else, instead of landing only on Brando.
+  const unionSettled = totalUnionSettledAmount();
+  const sharedPool = totalRake + unionSettled;
+  const { brandoGross, mattGross } = computeGrossSplits();
   // brandoTotal = everything still Brando's that hasn't left the club as real
   // cash (i.e. gross minus true withdrawals). Savings is still his money —
   // just earmarked — so it stays inside this total instead of being
@@ -874,13 +922,13 @@ function render(){
   // so the big number is just what's actually spendable, and Saved shows
   // as its own separate figure underneath.
   const brandoAvailable = brandoTotal - netSavings;
-  const mattGross = totalRake/2;
   const mattNet = mattGross - mattTotalWithdrawn;
-  // "In Bank" = the full combined rake amount, minus only real withdrawals
-  // that actually left the club (savings is still sitting in the club, just
-  // earmarked, so it's not subtracted here).
+  // "In Bank" = the full shared pool (rake collected, adjusted for what's
+  // actually settled with the union), minus only real withdrawals that
+  // left the club (savings is still sitting in the club, just earmarked,
+  // so it's not subtracted here).
   const totalSpent = totalWithdrawn + mattTotalWithdrawn;
-  const inBank = totalRake - totalSpent;
+  const inBank = sharedPool - totalSpent;
 
   document.getElementById('totalRake').textContent = fmt(totalRake);
   document.getElementById('bankVal').textContent = fmtAcct(inBank);
@@ -963,9 +1011,8 @@ function render(){
         </div>
         <div class="session-meta">Tournament ${fmt(tAmt)} · Cash ${fmt(cAmt)} — set from ClubGG's "1 Day" totals.</div>
         <div class="session-split">
-          <span class="split-pill">Brando <span>${fmt(dayTotal/2)}</span></span>
-          <span class="split-pill">Matt <span>${fmt(dayTotal/2)}</span></span>
-          <button class="session-reopen" style="margin-left:auto;" onclick="reopenDay('${date}')">Reopen</button>
+          <span class="split-pill">Brando <span>${fmt(dayTotal*partnerSplitForDate(date).brando)}</span></span>
+          <span class="split-pill">Matt <span>${fmt(dayTotal*partnerSplitForDate(date).matt)}</span></span>
         </div>
       </div>`;
     } else {
@@ -982,8 +1029,8 @@ function render(){
           </div>
           <div class="session-meta">${s.time?s.time+' - ':''}${s.players?s.players+' players':''}${s.buyins?' - '+s.buyins+' buy-ins':''}${s.payMethod?' - '+payMethodLabel(s.payMethod):''}${s.note?' - '+s.note:''}</div>
           <div class="session-split">
-            <span class="split-pill">Brando <span>${fmt(s.rake/2)}</span></span>
-            <span class="split-pill">Matt <span>${fmt(s.rake/2)}</span></span>
+            <span class="split-pill">Brando <span>${fmt(s.rake*partnerSplitForDate(s.date).brando)}</span></span>
+            <span class="split-pill">Matt <span>${fmt(s.rake*partnerSplitForDate(s.date).matt)}</span></span>
           </div>
         </div>`;
       });
@@ -1329,13 +1376,14 @@ function renderUnion(){
       // means the union paid you, negative means you paid the union).
       const weekProfit = rake + received;
       const color = weekProfit >= 0 ? 'var(--accent)' : 'var(--red)';
-      const perPartner = weekProfit / 2;
+      const brandoShare = weekProfit * partnerSplitForDate(wk).brando;
+      const mattShare = weekProfit * partnerSplitForDate(wk).matt;
       profitHtml = `<div class="week-profit">
         <div class="week-profit-label">Week Profit</div>
         <div class="week-profit-val" style="color:${color};">${fmtSigned(weekProfit)}</div>
         <div class="week-profit-sub">Rake ${fmt(rake)} ${received>=0?'+':'-'} settlement ${fmt(Math.abs(received))}</div>
-        <div class="week-row" style="border-top-color:var(--line);margin-top:8px;"><span>Brando</span><span style="color:${perPartner<0?'var(--red)':'var(--accent)'};">${fmtSigned(perPartner)}</span></div>
-        <div class="week-row" style="border-top:none;"><span>Matt</span><span style="color:${perPartner<0?'var(--red)':'var(--accent)'};">${fmtSigned(perPartner)}</span></div>
+        <div class="week-row" style="border-top-color:var(--line);margin-top:8px;"><span>Brando</span><span style="color:${brandoShare<0?'var(--red)':'var(--accent)'};">${fmtSigned(brandoShare)}</span></div>
+        <div class="week-row" style="border-top:none;"><span>Matt</span><span style="color:${mattShare<0?'var(--red)':'var(--accent)'};">${fmtSigned(mattShare)}</span></div>
       </div>`;
     }
     card.innerHTML = `
@@ -1412,7 +1460,8 @@ function updatePreview(){
   if(rake>0){
     preview.classList.remove('hidden');
     document.getElementById('rakeVal').textContent=fmt(rake);
-    document.getElementById('rakeEach').textContent='Brando '+fmt(rake/2)+' - Matt '+fmt(rake/2);
+    const pct = partnerSplitForDate(document.getElementById('fDate').value || today());
+    document.getElementById('rakeEach').textContent='Brando '+fmt(rake*pct.brando)+' - Matt '+fmt(rake*pct.matt);
   } else { preview.classList.add('hidden'); }
 }
 function saveSession(){
@@ -1494,9 +1543,8 @@ function confirmWithdraw(){
   // was never checking against it, so a withdrawal here could quietly eat
   // into the "locked" balance without tripping the Savings lock at all.
   if(currentWithdrawTarget === 'brando'){
-    const totalRake = totalRakeAll();
     const totalWithdrawn = data.withdrawals.reduce((a,w)=>a+w.amount,0);
-    const brandoGross = totalRake/2;
+    const brandoGross = computeGrossSplits().brandoGross;
     const brandoTotal = brandoGross - totalWithdrawn;
     const netSavings = savingsBalanceNow();
     const brandoAvailable = brandoTotal - netSavings;
@@ -1505,9 +1553,8 @@ function confirmWithdraw(){
       return;
     }
   } else {
-    const totalRake = totalRakeAll();
     const mattTotalWithdrawn = data.mattWithdrawals.reduce((a,w)=>a+w.amount,0);
-    const mattGross = totalRake/2;
+    const mattGross = computeGrossSplits().mattGross;
     const mattAvailable = mattGross - mattTotalWithdrawn;
     if(amount > mattAvailable + 0.004){
       alert('Only '+fmt(Math.max(0,mattAvailable))+' is available to withdraw.');
