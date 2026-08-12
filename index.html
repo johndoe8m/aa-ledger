@@ -893,7 +893,11 @@ function syncAutoSavings(){
     const contrib = delta * (s.autoPercent/100);
     s.contributions.push({id:Date.now()+Math.random(), date:today(), amount:contrib, note:'Auto '+s.autoPercent+'%', auto:true});
   }
-  if(delta > 0.001){ s.lastGrossSynced = gross; save(); }
+  // Always resync the bookmark to current gross, even when gross went down
+  // (e.g. a test session got deleted). Otherwise the bookmark stays stuck
+  // above reality and blocks auto-save on every session after until gross
+  // climbs back past that stranded high point.
+  if(gross !== s.lastGrossSynced){ s.lastGrossSynced = gross; save(); }
 }
 
 function render(){
