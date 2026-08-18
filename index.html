@@ -255,7 +255,7 @@
   <div class="tabs">
     <button class="tab active" onclick="switchTab('log',this)">Log</button>
     <button class="tab" onclick="switchTab('tools',this)">Tools</button>
-    <button class="tab" onclick="switchTab('union',this)">Union</button>
+    <button class="tab" onclick="switchTab('weeks',this)">Weeks</button>
     <button class="tab" onclick="switchTab('stats',this)">Stats</button>
   </div>
 </div>
@@ -276,6 +276,42 @@
     </div>
     <input type="file" id="importFile" accept="application/json" class="hidden" onchange="importData(event)"/>
     <div id="backupStatus"></div>
+    </div>
+  </div>
+
+  <!-- PARTNER SPLIT -->
+  <div class="close-card">
+    <div class="close-card-header" onclick="toggleCard(this)">
+      <div class="close-title">Partner Split</div>
+      <span class="close-card-chevron">⌄</span>
+    </div>
+    <div class="close-card-body hidden">
+    <div class="close-sub">Change the Brando/Matt split here whenever you renegotiate. A new split only applies going forward — everything logged before its effective date keeps whatever split was active then.</div>
+    <div id="splitCurrent" style="font-size:13px;margin-bottom:12px;"></div>
+    <div class="close-grid">
+      <div class="field">
+        <label>Effective Date</label>
+        <input type="date" id="spDate"/>
+      </div>
+      <div class="field">
+        <label>Brando %</label>
+        <input type="number" id="spBrandoPct" placeholder="60" min="0" max="100" step="1"/>
+      </div>
+    </div>
+    <button class="btn-save" onclick="addSplitChange()">Save New Split</button>
+    <div class="close-history" id="splitHistoryList"></div>
+    </div>
+  </div>
+
+  <!-- RESET PARTNER BALANCES -->
+  <div class="close-card">
+    <div class="close-card-header" onclick="toggleCard(this)">
+      <div class="close-title">Reset Partner Balances</div>
+      <span class="close-card-chevron">⌄</span>
+    </div>
+    <div class="close-card-body hidden">
+    <div class="close-sub">Clears Brando's and Matt's withdrawal history so both balances go back to matching their gross totals — use this if a balance gets stuck somewhere it shouldn't be. Your logged sessions and rake history are not touched.</div>
+    <button class="btn-cancel" style="margin-bottom:0;" onclick="resetPartnerBalances()">Reset Withdrawals</button>
     </div>
   </div>
 
@@ -498,14 +534,8 @@
   <div id="sessionLog"></div>
 </div>
 
-<div class="content hidden" id="tabUnion">
-  <div class="stat-card" style="margin-bottom:16px;">
-    <div class="stat-card-title">How this works</div>
-    <div style="font-size:11px;color:var(--muted);line-height:1.6;">
-      Weeks run Monday through the settlement on Sunday night. Expected settlement = (Rake × 90% rakeback) + P&L from ClubGG's Club Data screen, minus the $30 weekly fee. This tab is tracking only — entering numbers here compares against what the union actually pays, but does not change your Total Rake, In Bank, or withdrawable balances above.
-    </div>
-  </div>
-  <div id="unionWeeks"></div>
+<div class="content hidden" id="tabWeeks">
+  <div id="weeksList"></div>
 </div>
 
 <div class="content hidden" id="tabStats">
@@ -570,19 +600,19 @@
 
 <script>
 const RAKE_PER_BUYIN = 2;
-const UNION_WEEKLY_FEE = 30;
-const UNION_RAKEBACK_PCT = 0.90; // Brando's confirmed 90% rakeback on union settlement
-const BRANDO_SPLIT_PCT = 0.60; // Brando/Matt rake split (changed from 50/50 to 60/40)
-const MATT_SPLIT_PCT = 0.40;
-// Everything logged before this date keeps splitting 50/50, exactly as it
-// always did. Only rake/union settlements dated on or after this take the
-// new 60/40 split. Change this if you and Matt agreed on a different start
-// date for the new deal.
-const SPLIT_CUTOVER_DATE = '2026-08-10';
+// Partner split is now editable from the Tools tab (see data.splitHistory
+// below) instead of hardcoded here. Each entry is {effectiveDate, brando,
+// matt} with brando/matt as whole-number percents. A date uses whichever
+// entry has the latest effectiveDate that is still <= that date — so
+// everything logged before a new split's effective date keeps whatever
+// split was active then, and adding a new split never rewrites history.
 function partnerSplitForDate(date){
-  return date < SPLIT_CUTOVER_DATE
-    ? { brando: 0.5, matt: 0.5 }
-    : { brando: BRANDO_SPLIT_PCT, matt: MATT_SPLIT_PCT };
+  const sorted = [...data.splitHistory].sort((a,b)=> a.effectiveDate.localeCompare(b.effectiveDate));
+  let active = sorted[0];
+  for(const s of sorted){
+    if(s.effectiveDate <= date) active = s;
+  }
+  return { brando: active.brando/100, matt: active.matt/100 };
 }
 let currentWithdrawTarget = 'brando';
 
@@ -608,11 +638,12 @@ try{
   data = {sessions:[],withdrawals:[],mattWithdrawals:[]};
 }
 if(!data.mattWithdrawals) data.mattWithdrawals = [];
-if(!data.unionReceived) data.unionReceived = {};
-if(!data.unionTax) data.unionTax = {};
-if(!data.unionWinnings) data.unionWinnings = {};
-if(!data.unionTips) data.unionTips = {};
-if(!data.unionTipback) data.unionTipback = {};
+// Migrates old hardcoded 50/50-then-60/40 behavior into the new editable
+// split history, so nothing already logged changes value.
+if(!data.splitHistory) data.splitHistory = [
+  { effectiveDate: '2000-01-01', brando: 50, matt: 50 },
+  { effectiveDate: '2026-08-10', brando: 60, matt: 40 }
+];
 if(!data.dayTotals) data.dayTotals = {};
 if(!data.checks) data.checks = {};
 if(!data.floatChecks) data.floatChecks = [];
@@ -695,10 +726,10 @@ function importData(event){
     if(!ok){ event.target.value = ''; return; }
     data = parsed;
     if(!data.mattWithdrawals) data.mattWithdrawals = [];
-    if(!data.unionReceived) data.unionReceived = {};
-    if(!data.unionWinnings) data.unionWinnings = {};
-    if(!data.unionTips) data.unionTips = {};
-    if(!data.unionTipback) data.unionTipback = {};
+    if(!data.splitHistory) data.splitHistory = [
+      { effectiveDate: '2000-01-01', brando: 50, matt: 50 },
+      { effectiveDate: '2026-08-10', brando: 60, matt: 40 }
+    ];
     if(!data.dayTotals) data.dayTotals = {};
     if(!data.checks) data.checks = {};
     if(!data.floatChecks) data.floatChecks = [];
@@ -736,10 +767,9 @@ function totalRakeAll(){
   return allDayDates().reduce((a,d)=>a+rakeForDate(d),0);
 }
 // The real gross for each partner: every day's rake split by whatever deal
-// was in effect that day. This is what makes old logs stay 50/50 while new
-// ones use 60/40. Union settlement tracking is separate and does NOT feed
-// into this — it's for comparison only, so entering numbers in the Union
-// tab never changes what's withdrawable here.
+// was in effect that day (see data.splitHistory / Partner Split in Tools).
+// This is what makes old logs stay on their original split while new ones
+// use whatever's currently active.
 function computeGrossSplits(){
   const rakeBrando = allDayDates().reduce((a,d)=> a + rakeForDate(d)*partnerSplitForDate(d).brando, 0);
   const rakeMatt = allDayDates().reduce((a,d)=> a + rakeForDate(d)*partnerSplitForDate(d).matt, 0);
@@ -830,11 +860,15 @@ function resetAllData(){
   if(!sure) return;
   const reallySure = confirm('Really sure? This can\'t be undone.');
   if(!reallySure) return;
+  // Your partner split arrangement is a business setting, not session data —
+  // it survives a full reset so you don't have to re-enter it.
+  const preservedSplit = data.splitHistory;
   data = {
     sessions: [], withdrawals: [], mattWithdrawals: [],
-    unionReceived: {}, unionTax: {}, unionWinnings: {}, unionTips: {}, unionTipback: {},
-    dayTotals: {}, reconChecks: [],
-    filter: { mode: 'all', start: null, end: null }
+    dayTotals: {}, checks: {}, floatChecks: [], floatBuffer: 0, ious: [],
+    filter: { mode: 'all', start: null, end: null },
+    savings: { goal: 0, autoPercent: 0, lastGrossSynced: undefined, contributions: [], withdrawals: [] },
+    splitHistory: preservedSplit
   };
   save(); highlightChip('all'); render();
   alert('Cleared. Starting fresh from today.');
@@ -844,6 +878,7 @@ function init(){
   document.getElementById('fDate').value = today();
   document.getElementById('fTime').value = nowTime();
   document.getElementById('ckDate').value = today();
+  document.getElementById('spDate').value = today();
   if(data.floatBuffer) document.getElementById('flBuffer').value = data.floatBuffer;
   showStorageBannerIfNeeded();
   highlightChip(data.filter.mode);
@@ -890,9 +925,7 @@ function render(){
   const totalSavingsContrib = data.savings.contributions.reduce((a,c)=>a+c.amount,0);
   const totalSavingsWithdrawn = data.savings.withdrawals.reduce((a,w)=>a+w.amount,0);
   const netSavings = totalSavingsContrib - totalSavingsWithdrawn;
-  // sharedPool is just the rake you've actually collected — the Union tab
-  // is tracking-only now and never touches this, so it can't lock up money
-  // you can otherwise withdraw.
+  // sharedPool is just the rake you've actually collected.
   const sharedPool = totalRake;
   const { brandoGross, mattGross } = computeGrossSplits();
   // brandoTotal = everything still Brando's that hasn't left the club as real
@@ -1055,7 +1088,8 @@ function render(){
   renderCheckHistory();
   renderFloatHistory();
   renderIOUs();
-  renderUnion();
+  renderWeeks();
+  renderSplitSettings();
   renderSavings();
 }
 
@@ -1298,107 +1332,93 @@ function renderSavings(){
   container.innerHTML = html;
 }
 
-// ---- Union settlement math (track-only) ----
-// Confirmed formula:
-//   Tipback = Rake logged for the week × 90% (Brando's confirmed rakeback)
-//   Settlement = Tipback + P&L (ClubGG Club Data "P&L" field, from the union report)
-//   Total (after weekly fee) = Settlement - $30
-// This ONLY feeds the comparison card below — it never touches Total Rake,
-// In Bank, or gross/withdrawable balances. Real settlement money that
-// actually lands should be logged the same way any other rake money is
-// (e.g. a session entry or a Float Check update), so what you can withdraw
-// always matches what you're actually holding.
-function unionCalcForWeek(wk, rake){
-  const pnl = data.unionWinnings[wk] ?? 0;
-  const tipback = rake * UNION_RAKEBACK_PCT;
-  const settlement = tipback + pnl;
-  const total = settlement - UNION_WEEKLY_FEE;
-  return { pnl, tipback, settlement, total };
-}
-
-function renderUnion(){
+// ---- Weekly breakdown (Weeks tab) ----
+// Simple: rake collected each week (Mon–Sun), split between Brando and Matt
+// using whatever split was active on each day it was earned.
+function renderWeeks(){
+  const container = document.getElementById('weeksList');
+  if(!container) return;
   const byWeek = {};
   allDayDates().forEach(d=>{
     const wk = getWeekKey(d);
-    byWeek[wk] = (byWeek[wk]||0) + rakeForDate(d);
+    const dayRake = rakeForDate(d);
+    const pct = partnerSplitForDate(d);
+    if(!byWeek[wk]) byWeek[wk] = { rake: 0, brando: 0, matt: 0 };
+    byWeek[wk].rake += dayRake;
+    byWeek[wk].brando += dayRake*pct.brando;
+    byWeek[wk].matt += dayRake*pct.matt;
   });
   const curWeek = currentWeekKey();
-  if(!(curWeek in byWeek)) byWeek[curWeek] = 0;
-  // also surface any week where union numbers were entered even if no rake logged that week
-  Object.keys(data.unionWinnings).forEach(wk=>{ if(!(wk in byWeek)) byWeek[wk] = 0; });
+  if(!(curWeek in byWeek)) byWeek[curWeek] = { rake: 0, brando: 0, matt: 0 };
 
   const weeks = Object.keys(byWeek).sort((a,b)=>b.localeCompare(a));
-  const container = document.getElementById('unionWeeks');
-  container.innerHTML = '';
   if(weeks.length===0){
     container.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px 0;">Log or close a day to start tracking weeks.</div>';
     return;
   }
+  let html = '';
   weeks.forEach(wk=>{
-    const rake = byWeek[wk];
+    const w = byWeek[wk];
     const isCurrent = wk === curWeek;
-    const calc = unionCalcForWeek(wk, rake);
-    const received = data.unionReceived[wk];
-    const hasReceived = received !== undefined && received !== null && received !== '';
-    const card = document.createElement('div');
-    card.className = 'week-card';
-    let diffHtml = '';
-    let profitHtml = '';
-    if(!hasReceived){
-      diffHtml = `<div class="week-diff pending">Awaiting union settlement entry</div>`;
-    } else {
-      const diff = received - calc.total;
-      if(Math.abs(diff) < 0.01){
-        diffHtml = `<div class="week-diff match">✓ Matches your numbers</div>`;
-      } else {
-        const dir = diff > 0 ? 'more' : 'less';
-        diffHtml = `<div class="week-diff off">Off by ${fmt(Math.abs(diff))} (union paid ${dir} than expected)</div>`;
-      }
-      const weekProfit = rake + received;
-      const color = weekProfit >= 0 ? 'var(--accent)' : 'var(--red)';
-      const brandoShare = weekProfit * partnerSplitForDate(wk).brando;
-      const mattShare = weekProfit * partnerSplitForDate(wk).matt;
-      profitHtml = `<div class="week-profit">
-        <div class="week-profit-label">Week Profit (reference only)</div>
-        <div class="week-profit-val" style="color:${color};">${fmtSigned(weekProfit)}</div>
-        <div class="week-profit-sub">Rake ${fmt(rake)} ${received>=0?'+':'-'} settlement ${fmt(Math.abs(received))}</div>
-        <div class="week-row" style="border-top-color:var(--line);margin-top:8px;"><span>Brando</span><span style="color:${brandoShare<0?'var(--red)':'var(--accent)'};">${fmtSigned(brandoShare)}</span></div>
-        <div class="week-row" style="border-top:none;"><span>Matt</span><span style="color:${mattShare<0?'var(--red)':'var(--accent)'};">${fmtSigned(mattShare)}</span></div>
-      </div>`;
-    }
-    card.innerHTML = `
+    html += `<div class="week-card">
       <div class="week-head">
         <span class="week-label ${isCurrent?'week-current':''}">${isCurrent?'This week · ':''}${weekRangeLabel(wk)}</span>
-        <span class="week-rake">${fmt(rake)}</span>
+        <span class="week-rake">${fmt(w.rake)}</span>
       </div>
-      <div class="week-row"><span>Rake logged (your tracking)</span><span>${fmt(rake)}</span></div>
-      <div class="week-inputs-title">From Union Settlement Report</div>
-      <div class="week-inputs-sub">Enter P&L from ClubGG's Club Data screen once CJ/Pav send the weekly report. Usually negative when the club lost to players.</div>
-      <div class="week-field">
-        <label>P&amp;L</label>
-        <input type="number" step="0.01" value="${calc.pnl || ''}" placeholder="0.00" onchange="setUnionField('${wk}','unionWinnings', this.value)"/>
-      </div>
-      <div class="week-row"><span>Tipback (90% of rake)</span><span>${fmtSigned(calc.tipback)}</span></div>
-      <div class="week-row"><span>Settlement (Tipback + P&amp;L)</span><span>${fmtSigned(calc.settlement)}</span></div>
-      <div class="week-row"><span>Weekly fee</span><span>-${fmt(UNION_WEEKLY_FEE)}</span></div>
-      <div class="week-row total"><span>Expected total (club, both partners)</span><span>${fmtSigned(calc.total)}</span></div>
-      <div class="week-field">
-        <label>What the union actually settled</label>
-        <input type="number" step="0.01" placeholder="Enter after Sunday settlement" value="${received ?? ''}" onchange="setUnionReceived('${wk}', this.value)"/>
-      </div>
-      ${diffHtml}
-      ${profitHtml}
-    `;
-    container.appendChild(card);
+      <div class="week-row"><span>Brando</span><span>${fmt(w.brando)}</span></div>
+      <div class="week-row"><span>Matt</span><span>${fmt(w.matt)}</span></div>
+    </div>`;
   });
+  container.innerHTML = html;
 }
-function setUnionReceived(wk, val){
-  data.unionReceived[wk] = val === '' ? null : parseFloat(val);
-  save(); renderUnion();
+
+// ---- Partner Split settings (Tools tab) ----
+function renderSplitSettings(){
+  const curEl = document.getElementById('splitCurrent');
+  const listEl = document.getElementById('splitHistoryList');
+  if(!curEl || !listEl) return;
+  const sorted = [...data.splitHistory].map((s,i)=>({...s,i})).sort((a,b)=> a.effectiveDate.localeCompare(b.effectiveDate));
+  const activeNow = [...sorted].filter(s=>s.effectiveDate<=today()).pop() || sorted[0];
+  const dLabel = new Date(activeNow.effectiveDate+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  curEl.innerHTML = `Currently <span style="color:var(--accent);font-weight:700;">Brando ${activeNow.brando}% · Matt ${activeNow.matt}%</span> (since ${dLabel})`;
+
+  let html = '';
+  [...sorted].reverse().forEach(s=>{
+    const label = new Date(s.effectiveDate+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    html += `<div class="close-row"><span class="cr-date">Since ${label}</span><span style="display:flex;align-items:center;gap:8px;"><span class="cr-amt">Brando ${s.brando}% / Matt ${s.matt}%</span><button class="session-del" onclick="deleteSplitChange(${s.i})">x</button></span></div>`;
+  });
+  listEl.innerHTML = html;
 }
-function setUnionField(wk, field, val){
-  data[field][wk] = val === '' ? 0 : parseFloat(val);
-  save(); renderUnion();
+function addSplitChange(){
+  const dateVal = document.getElementById('spDate').value;
+  const brandoPct = parseFloat(document.getElementById('spBrandoPct').value);
+  if(!dateVal || isNaN(brandoPct) || brandoPct<0 || brandoPct>100){
+    alert('Enter a valid date and a Brando % between 0 and 100.');
+    return;
+  }
+  data.splitHistory.push({ effectiveDate: dateVal, brando: brandoPct, matt: 100-brandoPct });
+  save();
+  document.getElementById('spBrandoPct').value = '';
+  render();
+}
+function deleteSplitChange(idx){
+  if(data.splitHistory.length<=1){ alert('Keep at least one split on record.'); return; }
+  if(!confirm('Remove this split? Dates in that range will fall back to whichever split came before it.')) return;
+  data.splitHistory.splice(idx,1);
+  save(); render();
+}
+
+// ---- Reset Partner Balances (Tools tab) ----
+// Clears withdrawal history only, so Brando/Matt balances snap back to
+// matching their gross rake totals. Sessions and closed-day rake history
+// are untouched — this is for when a balance gets stuck wrong, not for
+// wiping your logs.
+function resetPartnerBalances(){
+  if(!confirm("This clears Brando's and Matt's withdrawal history so both balances go back to matching gross. Sessions and rake history stay untouched. Continue?")) return;
+  data.withdrawals = [];
+  data.mattWithdrawals = [];
+  save(); render();
+  alert('Partner balances reset.');
 }
 
 function toggleForm(){
@@ -1542,7 +1562,7 @@ function switchTab(name,el){
   el.classList.add('active');
   document.getElementById('tabLog').classList.toggle('hidden',name!=='log');
   document.getElementById('tabTools').classList.toggle('hidden',name!=='tools');
-  document.getElementById('tabUnion').classList.toggle('hidden',name!=='union');
+  document.getElementById('tabWeeks').classList.toggle('hidden',name!=='weeks');
   document.getElementById('tabStats').classList.toggle('hidden',name!=='stats');
 }
 function toggleCard(headerEl){
